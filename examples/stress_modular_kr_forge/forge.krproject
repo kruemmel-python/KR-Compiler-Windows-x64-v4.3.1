@@ -1,0 +1,21 @@
+[project]
+name = "stress_modular_kr_forge"
+version = "1.0.0"
+edition = "2026"
+
+[modules]
+sources = [
+    "app/",
+    "gui/",
+    "research/",
+    "compute/",
+    "orchestration/",
+    "storage/"
+]
+
+[dependencies]
+packages = ["opencl", "sqlite3", "nlohmann-json"]
+
+[build]
+optimization = "O3"
+warnings = "all"

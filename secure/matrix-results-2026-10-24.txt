@@ -1,0 +1,15 @@
+PASS MODULAR_KR_FORGE / Windows x64 (.exe) -> programm.exe
+PASS MODULAR_KR_FORGE / Linux x64 (ELF) -> programm
+PASS MODULAR_KR_FORGE / Android ARM64 (.apk) -> programm-android-arm64.apk
+PASS SINGLE_KR / Windows x64 (.exe) -> programm.exe
+PASS SINGLE_KR / Linux x64 (ELF) -> programm
+PASS SINGLE_KR / Android ARM64 (.apk) -> programm-android-arm64.apk
+PASS CPP_PROJECT / Windows x64 (.exe) -> programm.exe
+PASS CPP_PROJECT / Linux x64 (ELF) -> programm
+PASS CPP_PROJECT / Android ARM64 (.apk) -> programm-android-arm64.apk
+PASS RUST_PROJECT / Windows x64 (.exe) -> programm.exe
+PASS RUST_PROJECT / Linux x64 (ELF) -> programm
+PASS RUST_PROJECT / Android ARM64 (.apk) -> programm-android-arm64.apk
+PASS GO_PROJECT / Windows x64 (.exe) -> programm.exe
+PASS GO_PROJECT / Linux x64 (ELF) -> programm
+PASS GO_PROJECT / Android ARM64 (.apk) -> programm-android-arm64.apk

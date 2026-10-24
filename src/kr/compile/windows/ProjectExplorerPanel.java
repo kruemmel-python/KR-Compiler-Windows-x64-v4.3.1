@@ -1,0 +1,290 @@
+package kr.compile.windows;
+
+import kr.compile.ArtifactsManager;
+import kr.compile.DocumentManager;
+import kr.compile.ProjectManager;
+
+import javax.swing.*;
+import javax.swing.tree.*;
+import java.awt.*;
+import java.awt.event.MouseAdapter;
+import java.awt.event.MouseEvent;
+import java.io.File;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Comparator;
+
+public final class ProjectExplorerPanel extends JPanel implements ProjectManager.Listener {
+
+    private final JTree tree;
+    private final DefaultTreeModel treeModel;
+    private final DefaultMutableTreeNode rootNode;
+    private final JLabel headerLabel;
+    private final CardLayout bodyLayout = new CardLayout();
+    private final JPanel body = new JPanel(bodyLayout);
+
+    public ProjectExplorerPanel(Runnable onOpenProject, Runnable onCloneGitHub, Runnable onPublishGitHub) {
+        super(new BorderLayout());
+        setBackground(DarkTheme.BG_PANEL);
+
+        // Toolbar oben
+        JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
+        toolbar.setBackground(DarkTheme.BG_TOOLBAR);
+        toolbar.setBorder(BorderFactory.createMatteBorder(0, 0, 1, 0, DarkTheme.BORDER_DARK));
+
+        headerLabel = new JLabel("DATEIEN");
+        headerLabel.setForeground(DarkTheme.FG_PRIMARY);
+        headerLabel.setFont(DarkTheme.FONT_BOLD);
+        toolbar.add(headerLabel);
+
+        toolbar.add(Box.createHorizontalStrut(8));
+
+        JButton btnRefresh = DarkTheme.createIconButton("↺", "Projektstruktur aktualisieren");
+        btnRefresh.addActionListener(e -> ProjectManager.getInstance().refreshTree());
+        toolbar.add(btnRefresh);
+
+        JButton btnOpenExp = DarkTheme.createIconButton("↗", "Im Windows Explorer öffnen");
+        btnOpenExp.addActionListener(e -> {
+            File p = ProjectManager.getInstance().getActiveProjectDir();
+            if (p != null) {
+                try {
+                    ArtifactsManager.getInstance().openInExplorer(p);
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(this, "Fehler beim Öffnen: " + ex.getMessage());
+                }
+            }
+        });
+        toolbar.add(btnOpenExp);
+
+        add(toolbar, BorderLayout.NORTH);
+
+        rootNode = new DefaultMutableTreeNode("Kein Projekt");
+        treeModel = new DefaultTreeModel(rootNode);
+        tree = new JTree(treeModel);
+        tree.setBackground(DarkTheme.BG_PANEL);
+        tree.setForeground(DarkTheme.FG_PRIMARY);
+        tree.setFont(DarkTheme.FONT_REGULAR);
+        tree.setBorder(BorderFactory.createEmptyBorder(4, 4, 4, 4));
+
+        DefaultTreeCellRenderer renderer = new ExplorerTreeCellRenderer();
+        renderer.setBackgroundNonSelectionColor(DarkTheme.BG_PANEL);
+        renderer.setTextNonSelectionColor(DarkTheme.FG_PRIMARY);
+        renderer.setTextSelectionColor(Color.WHITE);
+        renderer.setBackgroundSelectionColor(DarkTheme.BG_SELECT);
+        renderer.setBorderSelectionColor(DarkTheme.ACCENT_BLUE);
+        renderer.setFont(DarkTheme.FONT_REGULAR);
+        tree.setCellRenderer(renderer);
+        tree.setRowHeight(Math.max(20, DarkTheme.FONT_REGULAR.getSize() + 8));
+        ToolTipManager.sharedInstance().registerComponent(tree);
+
+        tree.addMouseListener(new MouseAdapter() {
+            @Override
+            public void mouseClicked(MouseEvent e) {
+                TreePath path = tree.getPathForLocation(e.getX(), e.getY());
+                if (path == null) return;
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) path.getLastPathComponent();
+                if (!(node.getUserObject() instanceof FileItem item)) return;
+
+                if (e.getClickCount() == 2 && item.file.isFile()) {
+                    File root = ProjectManager.getInstance().getActiveProjectDir();
+                    try {
+                        DocumentManager.getInstance().openDocument(root, item.file);
+                    } catch (IOException ex) {
+                        JOptionPane.showMessageDialog(ProjectExplorerPanel.this, "Konnte Datei nicht öffnen: " + ex.getMessage());
+                    }
+                } else if (SwingUtilities.isRightMouseButton(e)) {
+                    showContextMenu(e.getX(), e.getY(), item);
+                }
+            }
+        });
+
+        JScrollPane scroll = new JScrollPane(tree);
+        scroll.setBorder(null);
+        scroll.getViewport().setBackground(DarkTheme.BG_PANEL);
+        scroll.setBackground(DarkTheme.BG_PANEL);
+        body.setBackground(DarkTheme.BG_PANEL);
+        body.add(scroll, "TREE");
+
+        JPanel empty = new JPanel(); empty.setBackground(DarkTheme.BG_PANEL); empty.setLayout(new BoxLayout(empty, BoxLayout.Y_AXIS));
+        empty.setBorder(BorderFactory.createEmptyBorder(18, 16, 16, 16));
+        JLabel folder = new JLabel("▢"); folder.setFont(new Font("Segoe UI", Font.PLAIN, 28)); folder.setForeground(DarkTheme.FG_MUTED); folder.setAlignmentX(CENTER_ALIGNMENT);
+        JLabel noWorkspace = new JLabel("Kein Arbeitsbereich geladen"); noWorkspace.setFont(DarkTheme.FONT_BOLD); noWorkspace.setForeground(Color.WHITE); noWorkspace.setAlignmentX(CENTER_ALIGNMENT);
+        JLabel explain = new JLabel("<html><div style='text-align:center'>Öffnen Sie einen lokalen Ordner oder<br>klonen Sie direkt von GitHub.</div></html>"); explain.setForeground(DarkTheme.FG_SECONDARY); explain.setAlignmentX(CENTER_ALIGNMENT);
+        JButton local = DarkTheme.createStyledButton("▣  Lokales Projekt öffnen", DarkTheme.BG_BUTTON, DarkTheme.FG_PRIMARY); local.setAlignmentX(CENTER_ALIGNMENT); local.setMaximumSize(new Dimension(240, 32)); local.addActionListener(e -> onOpenProject.run());
+        JButton github = DarkTheme.createStyledButton("◉  Von GitHub clonen & öffnen", DarkTheme.ACCENT_BLUE, Color.WHITE); github.setAlignmentX(CENTER_ALIGNMENT); github.setMaximumSize(new Dimension(240, 32)); github.addActionListener(e -> onCloneGitHub.run());
+        empty.add(folder); empty.add(Box.createVerticalStrut(8)); empty.add(noWorkspace); empty.add(Box.createVerticalStrut(7)); empty.add(explain); empty.add(Box.createVerticalStrut(17)); empty.add(local); empty.add(Box.createVerticalStrut(8)); empty.add(github); empty.add(Box.createVerticalGlue());
+        body.add(empty, "EMPTY");
+        add(body, BorderLayout.CENTER);
+
+        JPanel account = new JPanel(); account.setBackground(DarkTheme.BG_DARKEST); account.setLayout(new BoxLayout(account, BoxLayout.Y_AXIS));
+        account.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(DarkTheme.BORDER_DARK), BorderFactory.createEmptyBorder(10, 11, 10, 11)));
+        JLabel gh = new JLabel("◉  GitHub Account                         ● Bereit"); gh.setFont(DarkTheme.FONT_REGULAR); gh.setForeground(DarkTheme.FG_PRIMARY);
+        JLabel user = new JLabel("<html><font color='#8B949E'>Status:</font> &nbsp; <b>Bereit</b><br><font color='#8B949E'>Projekt:</font> &nbsp; Eigenes Repository wählen</html>"); user.setFont(new Font("Consolas", Font.PLAIN, 10)); user.setForeground(new Color(110, 169, 255));
+        JButton publish = DarkTheme.createStyledButton("Projekt auf GitHub veröffentlichen", new Color(0, 75, 56), new Color(91, 230, 174)); publish.addActionListener(e -> onPublishGitHub.run());
+        account.add(gh); account.add(Box.createVerticalStrut(9)); account.add(user); account.add(Box.createVerticalStrut(8)); account.add(publish);
+        add(account, BorderLayout.SOUTH);
+        bodyLayout.show(body, "EMPTY");
+
+        ProjectManager.getInstance().addListener(this);
+    }
+
+    public void disposePanel() {
+        ProjectManager.getInstance().removeListener(this);
+    }
+
+    private static final class FileItem {
+        final File file;
+        FileItem(File file) { this.file = file; }
+        @Override public String toString() { return file.getName(); }
+    }
+
+    private static final class ExplorerTreeCellRenderer extends DefaultTreeCellRenderer {
+        @Override
+        public Component getTreeCellRendererComponent(JTree tree, Object value, boolean selected,
+                                                      boolean expanded, boolean leaf, int row, boolean focus) {
+            JLabel label = (JLabel) super.getTreeCellRendererComponent(
+                    tree, value, selected, expanded, leaf, row, focus);
+            if (value instanceof DefaultMutableTreeNode node && node.getUserObject() instanceof FileItem item) {
+                boolean directory = item.file.isDirectory();
+                boolean root = node.getParent() == null;
+                label.setIcon(directory
+                        ? (root ? ExplorerIcons.project() : ExplorerIcons.folder(expanded))
+                        : ExplorerIcons.file(item.file));
+                label.setFont(directory ? DarkTheme.FONT_BOLD : DarkTheme.FONT_REGULAR);
+                label.setToolTipText((directory ? "Ordner: " : "Datei: ") + item.file.getAbsolutePath());
+            } else {
+                label.setIcon(ExplorerIcons.project());
+                label.setFont(DarkTheme.FONT_BOLD);
+                label.setToolTipText(null);
+            }
+            return label;
+        }
+    }
+
+    private void showContextMenu(int x, int y, FileItem item) {
+        JPopupMenu menu = new JPopupMenu();
+        menu.setBackground(DarkTheme.BG_TOOLBAR);
+        menu.setBorder(BorderFactory.createLineBorder(DarkTheme.BORDER_DARK));
+
+        File targetDir = item.file.isDirectory() ? item.file : item.file.getParentFile();
+
+        JMenuItem mNewFile = createMenuItem("Neue Datei …", () -> {
+            String name = JOptionPane.showInputDialog(this, "Dateiname:", "Neue Datei", JOptionPane.PLAIN_MESSAGE);
+            if (name != null && !name.trim().isEmpty()) {
+                File nf = new File(targetDir, name.trim());
+                try {
+                    if (nf.createNewFile()) {
+                        ProjectManager.getInstance().refreshTree();
+                        DocumentManager.getInstance().openDocument(ProjectManager.getInstance().getActiveProjectDir(), nf);
+                    }
+                } catch (IOException ex) {
+                    JOptionPane.showMessageDialog(this, "Fehler: " + ex.getMessage());
+                }
+            }
+        });
+        menu.add(mNewFile);
+
+        JMenuItem mNewDir = createMenuItem("Neuer Ordner …", () -> {
+            String name = JOptionPane.showInputDialog(this, "Ordnername:", "Neuer Ordner", JOptionPane.PLAIN_MESSAGE);
+            if (name != null && !name.trim().isEmpty()) {
+                File nd = new File(targetDir, name.trim());
+                if (nd.mkdirs()) ProjectManager.getInstance().refreshTree();
+            }
+        });
+        menu.add(mNewDir);
+
+        menu.addSeparator();
+
+        JMenuItem mRename = createMenuItem("Umbenennen …", () -> {
+            String name = JOptionPane.showInputDialog(this, "Neuer Name:", item.file.getName());
+            if (name != null && !name.trim().isEmpty()) {
+                File dest = new File(item.file.getParentFile(), name.trim());
+                if (item.file.renameTo(dest)) ProjectManager.getInstance().refreshTree();
+            }
+        });
+        menu.add(mRename);
+
+        JMenuItem mDelete = createMenuItem("Löschen", () -> {
+            int c = JOptionPane.showConfirmDialog(this, "Möchten Sie '" + item.file.getName() + "' wirklich löschen?", "Löschen", JOptionPane.YES_NO_OPTION);
+            if (c == JOptionPane.YES_OPTION) {
+                deleteRecursive(item.file);
+                ProjectManager.getInstance().refreshTree();
+            }
+        });
+        menu.add(mDelete);
+
+        menu.addSeparator();
+
+        JMenuItem mExp = createMenuItem("Im Windows Explorer zeigen", () -> {
+            try {
+                ArtifactsManager.getInstance().openInExplorer(item.file);
+            } catch (IOException ex) {
+                JOptionPane.showMessageDialog(this, "Fehler: " + ex.getMessage());
+            }
+        });
+        menu.add(mExp);
+
+        menu.show(tree, x, y);
+    }
+
+    private JMenuItem createMenuItem(String title, Runnable action) {
+        JMenuItem item = new JMenuItem(title);
+        item.setUI(new javax.swing.plaf.basic.BasicMenuItemUI());
+        item.setBackground(DarkTheme.BG_TOOLBAR);
+        item.setForeground(DarkTheme.FG_PRIMARY);
+        item.setFont(DarkTheme.FONT_REGULAR);
+        item.addActionListener(e -> action.run());
+        return item;
+    }
+
+    private void deleteRecursive(File f) {
+        if (f.isDirectory()) {
+            File[] c = f.listFiles();
+            if (c != null) for (File sub : c) deleteRecursive(sub);
+        }
+        f.delete();
+    }
+
+    @Override
+    public void onProjectOpened(File projectDir) {
+        headerLabel.setText(projectDir.getName().toUpperCase());
+        reloadTree(projectDir);
+        bodyLayout.show(body, "TREE");
+    }
+
+    @Override
+    public void onProjectClosed() {
+        headerLabel.setText("DATEIEN");
+        rootNode.setUserObject("Kein Projekt");
+        rootNode.removeAllChildren();
+        treeModel.reload();
+        bodyLayout.show(body, "EMPTY");
+    }
+
+    @Override
+    public void onTreeRefreshed(File projectDir) {
+        reloadTree(projectDir);
+    }
+
+    private void reloadTree(File projectDir) {
+        rootNode.setUserObject(new FileItem(projectDir));
+        rootNode.removeAllChildren();
+        populate(rootNode, projectDir);
+        treeModel.reload();
+        tree.expandRow(0);
+    }
+
+    private void populate(DefaultMutableTreeNode parentNode, File dir) {
+        File[] files = dir.listFiles();
+        if (files == null) return;
+        Arrays.sort(files, Comparator.comparing((File f) -> !f.isDirectory()).thenComparing(File::getName));
+        for (File f : files) {
+            if (f.getName().startsWith(".") || f.getName().equals("KR_BUILD")) continue;
+            DefaultMutableTreeNode child = new DefaultMutableTreeNode(new FileItem(f));
+            parentNode.add(child);
+            if (f.isDirectory()) {
+                populate(child, f);
+            }
+        }
+    }
+}

@@ -1,0 +1,89 @@
+<!doctype html><html lang="de"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>MDraft KR Export</title><style>body{font:17px/1.65 system-ui,sans-serif;background:#111827;color:#e5e7eb;max-width:860px;margin:48px auto;padding:0 24px}h1,h2,h3{color:#93c5fd}pre{background:#1f2937;padding:18px;border-radius:8px}blockquote{border-left:4px solid #60a5fa;padding-left:12px;color:#cbd5e1}</style><body>
+<h1>KR Compiler IDE – Beispielprojekte und Build-Matrix</h1>
+
+<p>Dieses Paket enthält fünf mit der KR Compiler IDE erzeugte Beispielprojekte. Jedes Projekt beinhaltet ein eigenständiges Testprogramm mit mehr als 5.000 Quellcodezeilen. Die Beispiele dienen als reproduzierbarer Belastungs- und Plattformtest.</p>
+
+<h2>Schnellstart</h2>
+
+<p>1. `KR-Compiler-Beispielprojekte.zip` entpacken.</p>
+<p>2. Die KR Compiler IDE starten.</p>
+<p>3. **Projekt → Projektordner öffnen …** wählen und einen der fünf Projektordner öffnen.</p>
+<p>4. Im Menü **Build** die Zielplattform wählen und **Projekt kompilieren** starten.</p>
+
+<p>Die Projekte benötigen keine Dateien außerhalb ihres jeweiligen Ordners. Build-Ausgaben und temporäre Dateien werden in `KR_BUILD/` innerhalb des Projekts erstellt.</p>
+
+<h2>Zielplattformen</h2>
+
+<p>| Ziel | Ergebnis | Werkzeugkette |</p>
+<p>|---|---|---|</p>
+<p>| Windows x64 | `KR_BUILD/programm.exe` | integriertes MinGW/GCC |</p>
+<p>| Linux x64 | `KR_BUILD/programm` (ELF) | portable Zig-Toolchain |</p>
+<p>| Android ARM64 | `KR_BUILD/programm-android-arm64.apk` | Android NDK und Runner-Template |</p>
+
+<p>Die Linux-Toolchain befindet sich in `toolchain/zig/` neben der IDE. Sie ist portabel und wird automatisch verwendet. Sie erzeugt echte ELF-Dateien, keine umbenannten Windows-EXE-Dateien.</p>
+
+<h2>Die fünf Projekte</h2>
+
+<h3>1. `stress_modular_kr_forge`</h3>
+
+<p>Diese Vorlage überprüft die modulare KR-FORGE-Projektanlage mit `forge.krproject`. Für den Belastungstest wurde die KR-Quelle auf ein kompaktes C++-Segment mit 5.000 Funktionen reduziert, damit die Plattform-Builds unabhängig von optionalen OpenCL-, SQLite- oder SDL-Bibliotheken reproduzierbar sind.</p>
+
+<p>&bull; Haupteinstieg: `main.kr`</p>
+<p>&bull; Konfiguration: `forge.krproject`</p>
+<p>&bull; Test: 5.000 Funktionen `stress_0()` bis `stress_4999()`; `main()` addiert den ersten und letzten Rückgabewert.</p>
+
+<h3>2. `stress_single_kr`</h3>
+
+<p>Ein einzelnes KR-Projekt ohne zusätzliche Projektstruktur. Die Datei `main.kr` enthält ein C++20-kompatibles KR-Segment mit mehr als 5.000 Zeilen.</p>
+
+<p>&bull; Haupteinstieg: `main.kr`</p>
+<p>&bull; Test: 5.000 Funktionen sowie eine Konsolenausgabe des Ergebnisses.</p>
+
+<h3>3. `stress_cpp_project`</h3>
+
+<p>Ein C++20/CMake-Beispiel. Für Windows wird die vorhandene CMake-Konfiguration verwendet; für Linux erzeugt die IDE aus den C++-Quellen direkt ein ELF-Artefakt mit Zig.</p>
+
+<p>&bull; Haupteinstieg: `main.cpp`</p>
+<p>&bull; Konfiguration: `CMakeLists.txt`</p>
+<p>&bull; Test: 5.000 `static`-Funktionen und ein C++-Konsolenprogramm.</p>
+
+<h3>4. `stress_rust_project`</h3>
+
+<p>Ein Cargo/Rust-Beispiel. Zusätzlich enthält die Vorlage `src/lib.rs` als `cdylib`, damit der Android-Runner eine ARM64-Shared-Library erhält.</p>
+
+<p>&bull; Haupteinstieg: `src/main.rs`</p>
+<p>&bull; Android-Bibliothek: `src/lib.rs`</p>
+<p>&bull; Konfiguration: `Cargo.toml`</p>
+<p>&bull; Test: 5.000 Rust-Funktionen und ein `println!`-Einstieg.</p>
+
+<h3>5. `stress_go_project`</h3>
+
+<p>Ein Go-Modul ohne externe Abhängigkeiten.</p>
+
+<p>&bull; Haupteinstieg: `main.go`</p>
+<p>&bull; Konfiguration: `go.mod`</p>
+<p>&bull; Test: 5.000 Go-Funktionen und ein `fmt.Println`-Einstieg.</p>
+
+<h2>Verifizierte Build-Änderungen</h2>
+
+<p>Während des Tests wurden folgende Fehler behoben:</p>
+
+<p>&bull; KR bindet die Adaptive-Compute-/OpenCL-Laufzeit nur noch ein, wenn GPU-fähiger Code vorhanden ist.</p>
+<p>&bull; Generierter KR-C++-Code bindet den Adaptive-Compute-Header nur ein, wenn er tatsächlich existiert.</p>
+<p>&bull; Rust erstellt für Android eine `cdylib`; der Android-Build verwendet den NDK-Linker.</p>
+<p>&bull; Go setzt für Windows, Linux und Android die passenden Zielplattformvariablen.</p>
+<p>&bull; Linux-C++- und Linux-KR-Builds verwenden Zig mit dem Ziel `x86_64-linux-musl`.</p>
+<p>&bull; Linux-Rust-Builds verwenden einen Zig-Wrapper als Linker für `x86_64-unknown-linux-gnu`.</p>
+<p>&bull; Deklarierte, aber nicht verwendete optionale Bibliotheken werden beim Linux-Cross-Build nicht gelinkt.</p>
+<p>&bull; Compiler-Caches (`TEMP`, `TMP`, Cargo, Go und Gradle) werden unter `KR_BUILD/.cache/` abgelegt, nicht im Benutzerprofil.</p>
+
+<h2>Testnachweis</h2>
+
+<p>Die Quelldateien in diesem Paket sind die tatsächlich erzeugten Belastungstests. Sie können die Zeilenzahl beispielsweise im Editor prüfen. Bei jedem Build wird das Artefakt zusätzlich am Dateiformat geprüft:</p>
+
+<p>&bull; Windows: PE-Kennung `MZ`</p>
+<p>&bull; Linux: ELF-Kennung `7F 45 4C 46`</p>
+<p>&bull; Android: APK als ZIP-Kennung `PK`</p>
+
+<p>Damit lässt sich nachvollziehen, dass nicht nur eine Datei umbenannt wurde, sondern das Artefakt für die jeweilige Plattform erzeugt wurde.</p>
+</body></html>

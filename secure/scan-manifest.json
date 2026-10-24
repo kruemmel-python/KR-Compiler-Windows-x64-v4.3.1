@@ -1,0 +1,174 @@
+{
+  "documentType": "codex-security.scan-manifest",
+  "scan": {
+    "artifacts": [
+      {
+        "mediaType": "application/json",
+        "path": "findings.json",
+        "sha256": "8dead2a83e7e9c1c391b913655a30b22c5cd6abfdbc01edce482e96d7f946e9c"
+      },
+      {
+        "mediaType": "application/json",
+        "path": "coverage.json",
+        "sha256": "32d2e6b320de052814fd0ff76a87d74373d5b46486ad654d82a03a8e868e44b8"
+      }
+    ],
+    "completedAt": "2026-10-24T15:25:29.224013Z",
+    "coverageRef": "coverage.json",
+    "findingsRef": "findings.json",
+    "id": "72827833-ad54-40b4-af70-724b81c7a9a5",
+    "producer": {
+      "name": "codex-security-plugin",
+      "version": "0.1.22"
+    },
+    "scope": {
+      "artifactsReviewed": [
+        ".github/workflows/android-build.yml",
+        ".gitignore",
+        "android/CC_OpenCl_Enterprise-main/include/CipherCore_NoiseCtrl.h",
+        "android/CC_OpenCl_Enterprise-main/include/SymBio_Interface.h",
+        "android/CC_OpenCl_Enterprise-main/src/CipherCore_NoiseCtrl.c",
+        "android/README.md",
+        "android/app/build.gradle",
+        "android/app/src/main/AndroidManifest.xml",
+        "android/app/src/main/java/kr/compile/ArtifactsManager.java",
+        "android/app/src/main/java/kr/compile/BuildManager.java",
+        "android/app/src/main/java/kr/compile/CompilerEngine.java",
+        "android/app/src/main/java/kr/compile/DocumentTree.java",
+        "android/app/src/main/java/kr/compile/GitImporter.java",
+        "android/app/src/main/java/kr/compile/KrAgentCore.java",
+        "android/app/src/main/java/kr/compile/KrAgentDialog.java",
+        "android/app/src/main/java/kr/compile/KrFileProvider.java",
+        "android/app/src/main/java/kr/compile/KrPipeline.java",
+        "android/app/src/main/java/kr/compile/KrProjectConfig.java",
+        "android/app/src/main/java/kr/compile/KrSourceMap.java",
+        "android/app/src/main/java/kr/compile/ProjectManager.java",
+        "android/app/src/main/java/kr/compile/RunnerPackager.java",
+        "android/app/src/main/java/kr/compile/ToolchainInstaller.java",
+        "android/app/src/main/java/kr/compile/VcpkgManager.java",
+        "android/build.gradle",
+        "android/gradle.properties",
+        "android/gradle/wrapper/gradle-wrapper.properties",
+        "android/runner/build.gradle",
+        "android/runner/src/main/AndroidManifest.xml",
+        "android/runner/src/main/cpp/CMakeLists.txt",
+        "android/runner/src/main/cpp/runner.cpp",
+        "android/runner/src/main/java/kr/compile/runner/GuiRunnerActivity.java",
+        "android/runner/src/main/java/kr/compile/runner/LauncherActivity.java",
+        "android/runner/src/main/java/kr/compile/runner/RunnerActivity.java",
+        "android/runner/src/main/java/kr/compile/runner/RunnerFiles.java",
+        "android/scripts/ExportSigningMaterial.java",
+        "android/scripts/build-apk.ps1",
+        "android/scripts/download-toolchain.ps1",
+        "android/scripts/prepare-signing.ps1",
+        "android/settings.gradle",
+        "linux/Start-KR-IDE.sh",
+        "linux/build.sh",
+        "linux/scripts/extract-zip.py",
+        "linux/scripts/provision-toolchain.sh",
+        "linux/scripts/verify-toolchain.sh",
+        "linux/src/kr/compile/ArtifactsManager.java",
+        "linux/src/kr/compile/BuildManager.java",
+        "linux/src/kr/compile/CompilerEngine.java",
+        "linux/src/kr/compile/DocumentManager.java",
+        "linux/src/kr/compile/KrAgentCore.java",
+        "linux/src/kr/compile/KrProjectConfig.java",
+        "linux/src/kr/compile/KrSourceMap.java",
+        "linux/src/kr/compile/ProjectManager.java",
+        "linux/src/kr/compile/ToolchainManager.java",
+        "linux/src/kr/compile/VcpkgManager.java",
+        "linux/src/kr/compile/linux/AgentDialog.java",
+        "linux/src/kr/compile/linux/BuildConsolePanel.java",
+        "windows/Manifest.txt",
+        "windows/README.md",
+        "windows/Start-KR-IDE-Console.bat",
+        "windows/Start-KR-IDE.bat",
+        "windows/bootstrap-toolchain.ps1",
+        "windows/build.bat",
+        "windows/download-toolchain.ps1",
+        "windows/provision-runtime.ps1",
+        "windows/src/kr/compile/ArtifactsManager.java",
+        "windows/src/kr/compile/BuildManager.java",
+        "windows/src/kr/compile/CompilerEngine.java",
+        "windows/src/kr/compile/KrAgentCore.java",
+        "windows/src/kr/compile/KrProjectConfig.java",
+        "windows/src/kr/compile/KrSourceMap.java",
+        "windows/src/kr/compile/ProjectManager.java",
+        "windows/src/kr/compile/ToolchainManager.java",
+        "windows/src/kr/compile/windows/AgentDialog.java",
+        "windows/src/kr/compile/windows/BuildConsolePanel.java"
+      ],
+      "excludePaths": [],
+      "includePaths": [
+        "."
+      ],
+      "limitations": [
+        "74 of 362 tracked paths were fully reviewed; coverage is partial.",
+        "The three very large mirrored CC_OpenCL.c files received focused review rather than exhaustive line-by-line coverage.",
+        "Checked-in binaries and document archives were not reverse engineered.",
+        "The repository does not contain provenance for any externally distributed official APK."
+      ],
+      "runtimeStatus": "Static validation completed; no unsafe proof-of-concept execution was required for source-established paths.",
+      "summary": "Risk-prioritized whole-repository Standard security review across Android, Windows, Linux, native libraries, project import/build/runner flows, agent boundaries, signing, dependency provisioning, and CI.",
+      "validationMode": "Independent delegated discovery followed by primary source-backed validation and attack-path calibration."
+    },
+    "sealedAt": "2026-10-24T15:25:29.224013Z",
+    "startedAt": "2026-10-24T15:06:22.728618Z",
+    "status": "completed",
+    "target": {
+      "displayName": "KR-Compiler",
+      "kind": "git_revision",
+      "revision": "05b9bc107d8948ab23f38bb52104b4b511fc6c17",
+      "targetId": "target_sha256_d48c48a8e1c912f81cd4e7f4a141fa27f4e96df8df8e57bbfb253811ad1d05fa"
+    },
+    "threatModel": {
+      "assets": [
+        "User projects, SAF-backed trees, source-map data, credentials, and generated build artifacts",
+        "Host and Android application execution authority, private application state, and persisted SAF grants",
+        "Compiler/toolchain, native-library, dependency, CI, and release artifact integrity",
+        "Agent API token, conversation/project context, canonical workspace confinement, and exact mutation approvals",
+        "Android IDE and runner signing identities and update authority",
+        "Correctness and memory safety of exported adaptive-compute APIs"
+      ],
+      "assumptions": [
+        "The authoritative workbench inventory contains 362 tracked paths and no repository SECURITY.md was present.",
+        "The frozen source shows Android online dependencies default enabled even though repository guidance describes explicit opt-in.",
+        "Windows/Linux may fall back to PATH-selected tools; the Linux portable launcher prepends its toolchain but inherits the remaining PATH.",
+        "The Windows standalone toolchain downloader and Android package-provisioning source omit independent package authenticity checks.",
+        "The standard Android build exports signing material from the same selected keystore used by Gradle; no external official APK provenance is present in the repository.",
+        "Large native source copies and checked-in binaries/documents could only receive focused static review; prebuilt binaries were not reverse engineered.",
+        "Generated runner code is sandboxed by Android, but same-package signed updates inherit package state and persisted grants after user installation.",
+        "CMake, Cargo, Make, and project code execution during an explicitly started build is expected product behavior; findings focus on broken surrounding controls."
+      ],
+      "attackerCapabilities": [
+        "Author a malicious repository/project, archive filenames, build metadata, symlinks, source maps, checkpoints, QASM, and public native API inputs",
+        "Control or compromise a configured model endpoint and choose agent action payloads",
+        "Control a GitHub repository selected for import or a referenced dependency/package/release source",
+        "Inspect any distributed IDE or generated runner APK and redistribute a forged update",
+        "Submit an untrusted pull request with read-only CI token context",
+        "No assumed inbound service access, multitenant server, or silent Android installation capability"
+      ],
+      "securityObjectives": [
+        "Confine every project-derived path to the canonical active root and make destructive traversal link-safe",
+        "Bind agent approvals to the exact canonical target and complete resulting bytes",
+        "Isolate SAF projects and prevent cross-project residual data disclosure",
+        "Authenticate executable toolchains/dependencies and honor offline/network choices",
+        "Keep bearer credentials and project context on authenticated confidential transports",
+        "Keep signing private keys out of distributed artifacts and separate IDE/runner identities",
+        "Validate all native dimensions, counts, serialized invariants, and parser lengths before memory operations",
+        "Preserve build and release artifact integrity across supported platforms"
+      ],
+      "summary": "KR-Compiler is a local cross-platform IDE/compiler for KR, C++, Rust, Go, CMake, Android, Windows, and Linux. User-controlled projects and archives flow through parsers, generators, native libraries, provisioning scripts, compiler toolchains, KR_BUILD output, Android SAF/cache mirrors, an optional model agent with mutation/build approvals, and generated signed runner APKs.",
+      "trustBoundaries": [
+        "Local or imported project content into build tools, native parsers, generators, and KR_BUILD",
+        "Android SAF provider into the app-private mirror and agent workspace",
+        "Project/task context to a configured model endpoint, then model actions through read/write/build controls",
+        "Maintainer keystore into exported application assets and RunnerPackager",
+        "GitHub repositories and downloaded archives/packages into project and executable toolchain directories",
+        "IDE-generated assets and native libraries into the runner application sandbox",
+        "Pull requests into CI and release/provisioning workflows"
+      ]
+    }
+  },
+  "schemaVersion": "1.0"
+}

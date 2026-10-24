@@ -1,0 +1,2268 @@
+{
+  "documentType": "codex-security.findings",
+  "findings": [
+    {
+      "attackPath": {
+        "controls": [
+          "No private key or built APK is tracked at the frozen revision, and independently built forks may use different development keys.",
+          "The repository does not prove which signer an externally published APK used.",
+          "Installation is not silent: Android still requires the victim to permit and confirm installation."
+        ],
+        "dataflow": {
+          "outcome": "Forged trusted updates execute under the existing package identity with its private state and persisted grants",
+          "sink": "Android package update signature verification",
+          "source": "Ordinary inspection of app/src/main/assets content packaged in the IDE APK",
+          "transformations": [
+            "Extract kr-runner-key.pk8 and its certificate",
+            "Build a higher-version APK with package kr.compile or kr.compile.runner",
+            "Sign it with the recovered key"
+          ]
+        },
+        "impact": {
+          "level": "critical",
+          "rationale": "Compromise of an Android application signing identity permits durable arbitrary code execution in the updated application identity and access to package-private state."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "Asset extraction and APK signing are routine, and the vulnerable standard build path is explicit; only user-mediated installation remains."
+        },
+        "preconditions": [
+          "A victim installs an APK built by the standard workflow",
+          "The victim approves the attacker's update installation"
+        ],
+        "reachability": {
+          "attacker": "Any recipient of an Android IDE APK produced by the standard workflow",
+          "entrypoint": "Ordinary inspection of app/src/main/assets content packaged in the IDE APK",
+          "outcome": "Forged trusted updates execute under the existing package identity with its private state and persisted grants",
+          "preconditions": [
+            "A victim installs an APK built by the standard workflow",
+            "The victim approves the attacker's update installation"
+          ],
+          "sink": "Android package update signature verification",
+          "summary": "The build workflow deterministically embeds the selected private key; no runtime secret or privileged filesystem access is needed to extract an APK asset."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_3b7ba1376d39ec46945699dd",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:079467efd7bb6dc3b3e03309b358410ec3ea2b89a088014bbe1f3d3f9a73a2f2"
+      },
+      "identity": {
+        "anchor": "embedded-android-signing-private-key"
+      },
+      "locations": [
+        {
+          "path": "android/scripts/prepare-signing.ps1",
+          "role": "source: selects the Gradle signing keystore",
+          "startLine": 13
+        },
+        {
+          "endLine": 53,
+          "path": "android/scripts/prepare-signing.ps1",
+          "role": "transformation: writes exported material into application assets",
+          "startLine": 41
+        },
+        {
+          "endLine": 35,
+          "path": "android/scripts/ExportSigningMaterial.java",
+          "role": "sink: writes PrivateKey.getEncoded() without encryption",
+          "startLine": 34
+        },
+        {
+          "endLine": 31,
+          "path": "android/scripts/build-apk.ps1",
+          "role": "reachability: invokes key export immediately before release assembly",
+          "startLine": 26
+        },
+        {
+          "endLine": 38,
+          "path": "android/app/build.gradle",
+          "role": "identity binding: configures the IDE signer from the same variables",
+          "startLine": 3
+        },
+        {
+          "endLine": 67,
+          "path": "android/app/src/main/java/kr/compile/RunnerPackager.java",
+          "role": "consumer: reconstructs the embedded PKCS#8 private key",
+          "startLine": 58
+        }
+      ],
+      "occurrenceId": "occ_49f0c00a87089952b3cd4c64",
+      "preventiveControls": [
+        "Build-time secret scanning of APK contents",
+        "Release-key separation policy",
+        "Signer identity regression tests"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Never package an application-signing private key. Separate the IDE release identity from runner signing, use non-exportable per-installation Android Keystore keys and preferably per-project runner package identities, and rotate any IDE or runner signing identities already shipped by this workflow.",
+      "remediationTests": [
+        "Build a release and assert no private-key asset or PKCS#8 material exists in the APK.",
+        "Assert the IDE release certificate differs from all runner certificates.",
+        "Verify runner signing succeeds with a non-exportable per-installation key and that generated runners use isolated identities."
+      ],
+      "rootCause": {
+        "summary": "One keystore is used both as the IDE release identity and as runtime runner-signing material, and its raw private key is deliberately copied into the IDE asset source set."
+      },
+      "ruleId": "embedded-android-signing-private-key",
+      "severity": {
+        "changeConditions": "Reduce to high if release packaging is changed to prove the IDE signer is never exported while a separate embedded runner key remains; remove the finding only when no reusable private key is packaged.",
+        "level": "critical",
+        "rationale": "A distributed artifact produced by the standard workflow discloses its own signing authority. A recipient can forge same-signer, higher-version IDE or runner updates and, after Android's user-mediated installation step, inherit the target package's private data and persisted SAF grants."
+      },
+      "summary": "The standard Android release workflow exports the same keystore key used to sign the IDE as an unencrypted PKCS#8 asset, and RunnerPackager consumes that asset to sign every fixed-identity runner APK. Any recipient of an APK built through this workflow can recover an application update-signing key.",
+      "taxonomy": {
+        "category": "cryptographic key exposure",
+        "cwe": [
+          "CWE-321",
+          "CWE-312"
+        ]
+      },
+      "title": "Release signing private key is exported into the distributed Android IDE",
+      "validation": {
+        "counterEvidence": [
+          "No private key or built APK is tracked at the frozen revision, and independently built forks may use different development keys.",
+          "The repository does not prove which signer an externally published APK used.",
+          "Installation is not silent: Android still requires the victim to permit and confirm installation."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "build-apk.ps1 invokes prepare-signing.ps1 before :app:assembleRelease.",
+          "prepare-signing.ps1 selects KR_SIGNING_STORE and exports kr-runner-key.pk8 into app/src/main/assets.",
+          "ExportSigningMaterial writes key.getEncoded(), and RunnerPackager reconstructs a usable PrivateKey from the packaged bytes.",
+          "app/build.gradle signs release builds from the same KR_SIGNING_* values; runner/build.gradle fixes applicationId to kr.compile.runner."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "Validated the same-key flow from build-apk.ps1 through prepare-signing.ps1 and ExportSigningMaterial into Gradle assets, then to RunnerPackager's PKCS8EncodedKeySpec and APK signer. No build exclusion removes the generated asset."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The outer line buffer is bounded.",
+          "Later parameter and argument buffers use bounded copies.",
+          "The output gate count is separately bounded."
+        ],
+        "dataflow": {
+          "outcome": "Native stack corruption, process crash, and potential code execution",
+          "sink": "gate_token[idx++] and the trailing gate_token[idx] NUL write",
+          "source": "quantum_import_from_qasm(filepath, ...)",
+          "transformations": [
+            "fgets accepts the crafted line",
+            "the tokenizer scans the leading mnemonic"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Memory corruption occurs inside the consuming native process."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "A 64-byte mnemonic is trivial to construct and needs no resource exhaustion or race."
+        },
+        "preconditions": [
+          "The consuming application invokes the public import API on the attacker's file"
+        ],
+        "reachability": {
+          "attacker": "A caller or file supplier controlling a QASM document consumed by the public CC_OpenCL API",
+          "entrypoint": "quantum_import_from_qasm(filepath, ...)",
+          "outcome": "Native stack corruption, process crash, and potential code execution",
+          "preconditions": [
+            "The consuming application invokes the public import API on the attacker's file"
+          ],
+          "sink": "gate_token[idx++] and the trailing gate_token[idx] NUL write",
+          "summary": "The parser is exported and documented; no authentication or semantic validation precedes the unsafe copy."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_add4af9b231eb00b6fb6e869",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:48fa28e05daf08769159b2a45b9a9b349e180f3b96ac7c21e9366cdb36e120d0"
+      },
+      "identity": {
+        "anchor": "qasm-gate-token-stack-overflow"
+      },
+      "locations": [
+        {
+          "endLine": 12913,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "sink: unchecked token copy",
+          "startLine": 12904
+        },
+        {
+          "endLine": 12913,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 12904
+        },
+        {
+          "endLine": 12913,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 12904
+        }
+      ],
+      "occurrenceId": "occ_7e11d2292e6faf4072fb002d",
+      "preventiveControls": [
+        "Centralized bounded parsing helpers",
+        "Native parser fuzzing in CI"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Use a length-aware tokenizer, reject overlong complete tokens before copying, and apply the fix to all platform copies.",
+      "remediationTests": [
+        "Run ASan/UBSan tests for 63-, 64-, 65-, and 511-byte gate tokens.",
+        "Fuzz the complete QASM import function."
+      ],
+      "rootCause": {
+        "summary": "The parser bounds the outer line but not the destination-specific token index before copying attacker-controlled bytes into a 64-byte stack array."
+      },
+      "ruleId": "qasm-gate-token-stack-overflow",
+      "severity": {
+        "changeConditions": "Reduce to medium if every consumer can prove QASM is trusted and the parser is isolated in a disposable sandbox; remove after length-aware tokenization rejects tokens at the boundary.",
+        "level": "high",
+        "rationale": "A short crafted QASM file reaches a public exported parser and produces controlled native stack corruption on Android, Windows, and Linux."
+      },
+      "summary": "quantum_import_from_qasm reads a line of up to 511 bytes into a bounded line buffer but copies the leading gate token into gate_token[64] without bounding the index, then writes a terminator out of bounds.",
+      "taxonomy": {
+        "category": "native stack memory corruption",
+        "cwe": [
+          "CWE-121"
+        ]
+      },
+      "title": "QASM gate-token parsing overflows a fixed stack buffer",
+      "validation": {
+        "counterEvidence": [
+          "The outer line buffer is bounded.",
+          "Later parameter and argument buffers use bounded copies.",
+          "The output gate count is separately bounded."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The exported function opens a caller-selected QASM path and uses fgets with a 512-byte line buffer.",
+          "gate_token is 64 bytes while idx increments until whitespace or '(' without a sizeof check.",
+          "The same source sequence exists in all three shipped platform copies."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "A non-whitespace token of 64 or more characters reaches the copy loop and its trailing NUL write; max_gates and later bounded parameter copies do not protect gate_token."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Direct agent paths are canonicalized and .git/.kragent are blocked.",
+          "Reads are size-limited and binary extensions are filtered.",
+          "Write and build actions require approval, but reads do not."
+        ],
+        "dataflow": {
+          "outcome": "Disclosure of readable files outside the active project and possible external overwrite through a symlinked parent during replace",
+          "sink": "HTTP request body sent by askModel",
+          "source": "A project-controlled KR_BUILD/source_map.json entry or filesystem symlink plus a model read action",
+          "transformations": [
+            "Alternate source resolution or recursive basename matching",
+            "unvalidated File substitution",
+            "text read appended to conversation"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Credentials, private keys, configuration, and other projects' source can be exfiltrated to the model endpoint."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "The input is a normal project artifact and agent reads need no additional approval."
+        },
+        "preconditions": [
+          "The user opens a project containing the malicious mapping or link",
+          "The agent is run and requests the alias"
+        ],
+        "reachability": {
+          "attacker": "A malicious project author, potentially assisted by an untrusted configured model endpoint",
+          "entrypoint": "A project-controlled KR_BUILD/source_map.json entry or filesystem symlink plus a model read action",
+          "outcome": "Disclosure of readable files outside the active project and possible external overwrite through a symlinked parent during replace",
+          "preconditions": [
+            "The user opens a project containing the malicious mapping or link",
+            "The agent is run and requests the alias"
+          ],
+          "sink": "HTTP request body sent by askModel",
+          "summary": "The product automatically trusts the alternate resolver after safeFile rejection; native Git clone can preserve repository symlinks."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_cd4b1507157ebc3ee453da44",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:933828fad9663d15eb43710ec3673c7319e581a9aac13d8f83772b07c718acf3"
+      },
+      "identity": {
+        "anchor": "agent-alternate-path-containment-bypass"
+      },
+      "locations": [
+        {
+          "endLine": 258,
+          "path": "android/app/src/main/java/kr/compile/KrSourceMap.java",
+          "role": "source-map lookup accepts unvalidated originalFile",
+          "startLine": 217
+        },
+        {
+          "endLine": 910,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "read sink substitutes mapped path without safeFile",
+          "startLine": 835
+        },
+        {
+          "endLine": 1165,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "fallback traversal follows filesystem links",
+          "startLine": 1101
+        },
+        {
+          "endLine": 830,
+          "path": "windows/src/kr/compile/KrAgentCore.java",
+          "role": "desktop mapped-read sink",
+          "startLine": 755
+        },
+        {
+          "endLine": 1077,
+          "path": "windows/src/kr/compile/KrAgentCore.java",
+          "role": "desktop recursive fallback",
+          "startLine": 1013
+        },
+        {
+          "endLine": 830,
+          "path": "linux/src/kr/compile/KrAgentCore.java",
+          "role": "Linux mapped-read sink",
+          "startLine": 755
+        }
+      ],
+      "occurrenceId": "occ_eb6bda3c7ca89f13eb08e9ba",
+      "preventiveControls": [
+        "Single project-path resolver",
+        "Link-safe filesystem traversal",
+        "Approval bound to canonical paths"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Route every mapped, searched, and diagnostic path through one final canonical containment function; reject absolute and parent paths, traverse with NOFOLLOW_LINKS, skip symlinks, and revalidate immediately before every read or write.",
+      "remediationTests": [
+        "Create source maps with '..' and absolute paths and assert rejection.",
+        "Create file and directory symlinks escaping the project and assert list/read/replace cannot follow them.",
+        "Repeat on Android SAF and desktop roots."
+      ],
+      "rootCause": {
+        "summary": "Alternate path representations are trusted after direct safeFile validation fails: source_map originalFile retains parent traversal and recursive File APIs follow links, with no canonical containment check immediately before reading."
+      },
+      "ruleId": "agent-alternate-path-containment-bypass",
+      "severity": {
+        "changeConditions": "Reduce to medium if agent reads require explicit full-path approval or the endpoint is fully trusted; remove when every alternate resolver is canonicalized and symlink-safe at the final sink.",
+        "level": "high",
+        "rationale": "A malicious project plus an ordinary agent read can disclose user-readable credentials or source outside the project across Android, Windows, and Linux, without a read approval."
+      },
+      "summary": "Direct model-selected paths pass through safeFile, but source-map resolution and recursive basename fallback return Files without a final canonical-root check. A malicious project can redirect approval-free reads to text files outside the active project, which are then sent to the model endpoint.",
+      "taxonomy": {
+        "category": "workspace path confinement bypass",
+        "cwe": [
+          "CWE-22",
+          "CWE-59"
+        ]
+      },
+      "title": "Agent source-map and symlink fallbacks escape project containment",
+      "validation": {
+        "counterEvidence": [
+          "Direct agent paths are canonicalized and .git/.kragent are blocked.",
+          "Reads are size-limited and binary extensions are filtered.",
+          "Write and build actions require approval, but reads do not."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "KrSourceMap.normalize removes prefixes but does not reject '..', and findSourceForGeneratedFile checks only File.isFile().",
+          "read() substitutes the mapped File and reads it without safeFile.",
+          "findFileInProject recursively uses isDirectory/listFiles/isFile, follows links, and returns the original File without canonical revalidation.",
+          "Tool output is appended to model history and sent on the next request."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "Both bypasses were traced to Files.readAllLines and then into conversation history. Direct paths remain protected, which narrows rather than defeats the finding."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "A successful native git clone avoids this extractor.",
+          "HTTPS prevents opportunistic transit modification but not malicious repository contents."
+        ],
+        "dataflow": {
+          "outcome": "Overwrite or creation of app-writable files outside the imported project and possible later toolchain execution",
+          "sink": "FileOutputStream on the unchecked output File",
+          "source": "A crafted branch ZIP entry name containing backslashes and parent components",
+          "transformations": [
+            "Backslashes become slashes",
+            "the archive root prefix is stripped",
+            "relName is joined to destDir"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Arbitrary app-private file overwrite can corrupt projects, poison configuration, or place executable toolchain bytes."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "The filename is repository-controlled and the fallback is an intentional supported path."
+        },
+        "preconditions": [
+          "The Android user imports the attacker's repository",
+          "native git is unavailable or clone fails"
+        ],
+        "reachability": {
+          "attacker": "Owner of a GitHub repository selected for import",
+          "entrypoint": "A crafted branch ZIP entry name containing backslashes and parent components",
+          "outcome": "Overwrite or creation of app-writable files outside the imported project and possible later toolchain execution",
+          "preconditions": [
+            "The Android user imports the attacker's repository",
+            "native git is unavailable or clone fails"
+          ],
+          "sink": "FileOutputStream on the unchecked output File",
+          "summary": "Fresh installations may reach the fallback before a toolchain git exists; the vulnerable path performs no final containment check."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_963a15e93b874875367d499f",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:066c0d4dabab8ca41652bce06ba48c9acc82a844694894db562726e966ee0602"
+      },
+      "identity": {
+        "anchor": "github-zip-backslash-zip-slip"
+      },
+      "locations": [
+        {
+          "endLine": 200,
+          "path": "android/app/src/main/java/kr/compile/GitImporter.java",
+          "role": "attacker entry name normalization and unchecked output construction",
+          "startLine": 175
+        }
+      ],
+      "occurrenceId": "occ_c7b9ca2a682dc09676fd5b6d",
+      "preventiveControls": [
+        "Shared safe archive extractor",
+        "Canonical containment assertion",
+        "Archive size and entry limits"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "After separator normalization, reject absolute, drive-qualified, empty, dot, and dot-dot components and require every normalized/canonical output to remain below the canonical destination. Clean partial extraction on failure.",
+      "remediationTests": [
+        "Import ZIPs with Unix backslashes, '..', absolute, drive, and mixed-separator names and assert no outside file changes.",
+        "Test file and directory entries plus fallback error cleanup."
+      ],
+      "rootCause": {
+        "summary": "The extractor introduces path separators by normalizing backslashes but never rejects '..', absolute forms, or a canonical destination outside destDir."
+      },
+      "ruleId": "github-zip-backslash-zip-slip",
+      "severity": {
+        "changeConditions": "Reduce to medium if the ZIP fallback is disabled or extracted into an OS sandbox with no sensitive writable neighbors; remove after post-normalization component and canonical-root enforcement.",
+        "level": "high",
+        "rationale": "A repository owner can use a legal backslash-containing Git filename to escape the new project during the common no-git fallback and plant or overwrite app-private files, including toolchain components later executed by the IDE."
+      },
+      "summary": "GitImporter converts repository-controlled backslashes to forward slashes and writes the resulting relative entry under the destination without rejecting parent components or checking canonical containment.",
+      "taxonomy": {
+        "category": "archive extraction path traversal",
+        "cwe": [
+          "CWE-22"
+        ]
+      },
+      "title": "GitHub ZIP fallback permits traversal after backslash normalization",
+      "validation": {
+        "counterEvidence": [
+          "A successful native git clone avoids this extractor.",
+          "HTTPS prevents opportunistic transit modification but not malicious repository contents."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The URL restriction authenticates the GitHub host, not repository-controlled filenames.",
+          "entry.getName().replace('\\\\','/') changes attacker bytes into separators.",
+          "new File(destDir, relName) is written without canonical containment.",
+          "Toolchain readiness relies on stamps and expected files that can be planted outside the project."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "The fallback is reachable when the bundled git binary is absent or clone fails. An entry such as repository-root/..\\..\\usr\\bin\\clang++ becomes a traversing path after root-prefix stripping."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The user must start a build.",
+          "Symlink creation may require privileges or configuration on some Windows systems.",
+          "The fixed path limits which project entry must be controlled."
+        ],
+        "dataflow": {
+          "outcome": "Recursive deletion of external user-writable data",
+          "sink": "File.delete on files and directories reached outside the project",
+          "source": "A symlink at KR_BUILD/cmake_build_android",
+          "transformations": [
+            "Build selects the Android CMake target",
+            "deleteDirectory classifies the link target as a directory",
+            "recursive traversal enumerates target children"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Potential loss of arbitrary user-writable files selected by the link target."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires a platform/project combination that preserves symlinks and a build action."
+        },
+        "preconditions": [
+          "The project representation preserves the directory symlink",
+          "The user starts the affected build"
+        ],
+        "reachability": {
+          "attacker": "Author of a local or cloned symlink-capable project",
+          "entrypoint": "A symlink at KR_BUILD/cmake_build_android",
+          "outcome": "Recursive deletion of external user-writable data",
+          "preconditions": [
+            "The project representation preserves the directory symlink",
+            "The user starts the affected build"
+          ],
+          "sink": "File.delete on files and directories reached outside the project",
+          "summary": "The destructive call occurs before CMake and without validating the build directory's real path."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_ae8ef9f9688b730d39bf85b2",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:26d78593ce866f8dafd67829e17d55e2846c7a5f1c021f55621653232de3685e"
+      },
+      "identity": {
+        "anchor": "build-directory-symlink-recursive-delete"
+      },
+      "locations": [
+        {
+          "endLine": 734,
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "recursive deletion follows directory links",
+          "startLine": 726
+        },
+        {
+          "endLine": 824,
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "project-controlled build path passed to deletion",
+          "startLine": 822
+        },
+        {
+          "endLine": 769,
+          "path": "linux/src/kr/compile/CompilerEngine.java",
+          "role": "recursive deletion follows directory links",
+          "startLine": 761
+        },
+        {
+          "endLine": 859,
+          "path": "linux/src/kr/compile/CompilerEngine.java",
+          "role": "project-controlled build path passed to deletion",
+          "startLine": 857
+        }
+      ],
+      "occurrenceId": "occ_a8b2d9ae6a0a2b7ff9cfbf5d",
+      "preventiveControls": [
+        "Trusted build-root ownership",
+        "NOFOLLOW_LINKS recursive deletion",
+        "Canonical boundary checks"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Place disposable build directories in trusted IDE-owned storage or delete with a NOFOLLOW_LINKS walk that rejects every link and verifies each real path remains below a trusted build root.",
+      "remediationTests": [
+        "Preseed file and directory symlinks at the build path and assert the external target remains unchanged.",
+        "Run deletion-race and junction tests on Windows."
+      ],
+      "rootCause": {
+        "summary": "Deletion tests File.isDirectory and recurses through listFiles without NOFOLLOW_LINKS, a real-path boundary, or ownership validation."
+      },
+      "ruleId": "build-directory-symlink-recursive-delete",
+      "severity": {
+        "changeConditions": "Raise to high where imported projects routinely preserve symlinks and builds run automatically; remove when deletion is link-safe and build roots are freshly created outside attacker-controlled trees.",
+        "level": "medium",
+        "rationale": "The sink can recursively delete user-writable external data, but exploitation requires a symlink-capable local project and the user to approve/start the affected build target."
+      },
+      "summary": "Windows and Linux CMake-for-Android builds recursively delete KR_BUILD/cmake_build_android using File APIs that follow directory symlinks. A project can preseed that path as a link to an external directory.",
+      "taxonomy": {
+        "category": "symlink-following destructive filesystem operation",
+        "cwe": [
+          "CWE-59"
+        ]
+      },
+      "title": "Project-controlled build-directory symlinks can delete files outside the project",
+      "validation": {
+        "counterEvidence": [
+          "The user must start a build.",
+          "Symlink creation may require privileges or configuration on some Windows systems.",
+          "The fixed path limits which project entry must be controlled."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "deleteDirectory recursively traverses every isDirectory result.",
+          "buildCMake constructs outputDir/cmake_build_android and immediately deletes it.",
+          "No canonical comparison or symbolic-link rejection occurs."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "The output directory is the project's KR_BUILD tree and the fixed child is deleted before CMake configuration, so a preexisting link is followed before the IDE recreates the directory."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The function requires initialized Mycel state.",
+          "Positive oversized counts are safely clamped."
+        ],
+        "dataflow": {
+          "outcome": "Heap corruption, crash, and potential native code execution",
+          "sink": "st->kappa_mood[i] = 0.0f for negative i",
+          "source": "step_subqg_feedback(..., count)",
+          "transformations": [
+            "upper-only clamp",
+            "negative value retained as loop initializer"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Attacker-controlled out-of-bounds heap writes occur in the native process."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "A single negative integer deterministically reaches the sink."
+        },
+        "preconditions": [
+          "Mycel state has been initialized"
+        ],
+        "reachability": {
+          "attacker": "A public CC_OpenCL library caller",
+          "entrypoint": "step_subqg_feedback(..., count)",
+          "outcome": "Heap corruption, crash, and potential native code execution",
+          "preconditions": [
+            "Mycel state has been initialized"
+          ],
+          "sink": "st->kappa_mood[i] = 0.0f for negative i",
+          "summary": "The exported API accepts the signed count directly and contains no lower-bound guard."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_b42432669294207c1ba94686",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:60ca928fb5004350594f42f6488e06a9036037b447de7a61de4af4a4289c9abd"
+      },
+      "identity": {
+        "anchor": "mycel-negative-feedback-count-underwrite"
+      },
+      "locations": [
+        {
+          "endLine": 9863,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "exported signed count entrypoint",
+          "startLine": 9848
+        },
+        {
+          "endLine": 9863,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 9848
+        },
+        {
+          "endLine": 9863,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 9848
+        }
+      ],
+      "occurrenceId": "occ_b493d91f72f651ee7cd195a8",
+      "preventiveControls": [
+        "Signed-input validation",
+        "Sanitizer-backed native API tests"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Reject count < 0 before any loop or conversion, then add lower/upper bound assertions at the internal array boundary.",
+      "remediationTests": [
+        "ASan-test count values INT_MIN, -2, -1, 0, C, and C+1 on all source copies."
+      ],
+      "rootCause": {
+        "summary": "The function enforces only count <= C, then uses the still-negative signed count as an array index in a write loop."
+      },
+      "ruleId": "mycel-negative-feedback-count-underwrite",
+      "severity": {
+        "changeConditions": "Reduce to medium only if the API is unreachable from untrusted or extension-controlled callers; remove after validating the lower bound before indexing.",
+        "level": "high",
+        "rationale": "A public-library caller can trigger direct heap underwrite with a single negative integer after ordinary initialization."
+      },
+      "summary": "step_subqg_feedback clamps count only when it exceeds C. A negative count becomes the initial index of a clearing loop and writes before kappa_mood.",
+      "taxonomy": {
+        "category": "native heap out-of-bounds write",
+        "cwe": [
+          "CWE-129"
+        ]
+      },
+      "title": "Negative feedback count writes before the Mycel heap allocation",
+      "validation": {
+        "counterEvidence": [
+          "The function requires initialized Mycel state.",
+          "Positive oversized counts are safely clamped."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "kappa_mood is allocated for exactly C floats.",
+          "Only the upper bound is clamped.",
+          "The clearing loop starts at attacker-controlled count."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "count=-1 skips the positive memcpy and immediately writes kappa_mood[-1]; more-negative inputs underwrite more elements."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Invalid magic/version is rejected.",
+          "mycel_initialize rejects non-positive dimensions.",
+          "The safe setter for active count clamps, but the loader bypasses it."
+        ],
+        "dataflow": {
+          "outcome": "Native heap out-of-bounds reads/writes, crash, and potential code execution",
+          "sink": "Later update/reproduction loops and free-list indexing",
+          "source": "load_mycel_state(path)",
+          "transformations": [
+            "header parsed",
+            "arrays allocated from T_cap",
+            "untrusted counters and lists installed into live state"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Serialized input corrupts native heap memory."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "Small internally inconsistent fields are sufficient; no huge allocation is required."
+        },
+        "preconditions": [
+          "The application loads the crafted checkpoint and invokes a normal state-processing API afterward"
+        ],
+        "reachability": {
+          "attacker": "A caller or file supplier controlling a Mycel checkpoint passed to the exported loader",
+          "entrypoint": "load_mycel_state(path)",
+          "outcome": "Native heap out-of-bounds reads/writes, crash, and potential code execution",
+          "preconditions": [
+            "The application loads the crafted checkpoint and invokes a normal state-processing API afterward"
+          ],
+          "sink": "Later update/reproduction loops and free-list indexing",
+          "summary": "The checkpoint path is a documented public API; no authenticity or complete-state validation intervenes."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_00deb968927a99949f582038",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c0263ab662b71a790b84d14ffb894476b475f666e39be2cfbeb0e561bbe8fdbb"
+      },
+      "identity": {
+        "anchor": "mycel-checkpoint-invariant-bypass"
+      },
+      "locations": [
+        {
+          "endLine": 10631,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "checkpoint parser and unchecked state commit",
+          "startLine": 10568
+        },
+        {
+          "endLine": 9824,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "later free-list and active-count sinks",
+          "startLine": 9788
+        },
+        {
+          "endLine": 10631,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable loader",
+          "startLine": 10568
+        },
+        {
+          "endLine": 10631,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable loader",
+          "startLine": 10568
+        }
+      ],
+      "occurrenceId": "occ_5e3d1fcaed9ca09c219daf65",
+      "preventiveControls": [
+        "Versioned serialization schema validation",
+        "Atomic temporary-state loading",
+        "Native parser fuzzing"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Parse into temporary storage, validate all dimensions, counters, indices, lengths, and every fread result, then atomically commit only a complete valid state.",
+      "remediationTests": [
+        "Fuzz checkpoint headers and truncated payloads under ASan/UBSan.",
+        "Assert T_act/free_head <= T_cap and every list index is in range before commit."
+      ],
+      "rootCause": {
+        "summary": "Serialized structural invariants are not checked before attacker values become live loop bounds and heap indices; payload fread results are also ignored."
+      },
+      "ruleId": "mycel-checkpoint-invariant-bypass",
+      "severity": {
+        "changeConditions": "Reduce to medium if checkpoint files are strongly authenticated and isolated from user content; remove after complete temporary parsing and invariant validation.",
+        "level": "high",
+        "rationale": "A small crafted checkpoint reaches a public loader and causes repeatable out-of-bounds native reads and writes during normal subsequent API operations."
+      },
+      "summary": "load_mycel_state validates magic and version but commits checkpoint-controlled T_act, free_head, dimensions, and free-list entries without enforcing their relationships to T_cap. Later update and reproduction operations use those fields as loop bounds and indices.",
+      "taxonomy": {
+        "category": "unsafe deserialization into native array state",
+        "cwe": [
+          "CWE-20",
+          "CWE-129"
+        ]
+      },
+      "title": "Mycel checkpoint loader accepts attacker-controlled array bounds and indices",
+      "validation": {
+        "counterEvidence": [
+          "Invalid magic/version is rejected.",
+          "mycel_initialize rejects non-positive dimensions.",
+          "The safe setter for active count clamps, but the loader bypasses it."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "Only checkpoint magic and version are checked.",
+          "T_act and free_head are assigned without comparison to T_cap.",
+          "Free-list entries are read without range validation.",
+          "Subsequent public operations index arrays with restored fields."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "For T_cap=1 and T_act=2, a subsequent feedback/update loop reaches element 1 beyond one-element arrays. Invalid free_head/free_list values provide independent out-of-bounds paths."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Null and zero-length operations are ignored.",
+          "A cooperative caller can pass only exact live addresses returned by allocate."
+        ],
+        "dataflow": {
+          "outcome": "Arbitrary invalid free or memory overwrite in the native process",
+          "sink": "free(pointer) or memcpy(pointer, source, size)",
+          "source": "simulated_vram_free(address, size) or simulated_vram_write(address, source, size)",
+          "transformations": [
+            "integer converted to host pointer"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Direct memory corruption can crash the process or enable code execution."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "The primitives accept simple chosen values and need no race or malformed large object."
+        },
+        "preconditions": [
+          "The attacker can call the exported library API"
+        ],
+        "reachability": {
+          "attacker": "A public-library caller able to invoke simulated VRAM exports",
+          "entrypoint": "simulated_vram_free(address, size) or simulated_vram_write(address, source, size)",
+          "outcome": "Arbitrary invalid free or memory overwrite in the native process",
+          "preconditions": [
+            "The attacker can call the exported library API"
+          ],
+          "sink": "free(pointer) or memcpy(pointer, source, size)",
+          "summary": "No registry or bounds check separates the exported input from the host-memory sink."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_fc56549cbf22d44b3096893d",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:8649ff8c3a9e908a82a78dbf1b58805e86a0ed46aee3c9b1c0238e1fd61e86fb"
+      },
+      "identity": {
+        "anchor": "simulated-vram-raw-address-memory-corruption"
+      },
+      "locations": [
+        {
+          "endLine": 17799,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "unchecked integer-address free and write",
+          "startLine": 17787
+        },
+        {
+          "endLine": 17799,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 17787
+        },
+        {
+          "endLine": 17799,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 17787
+        }
+      ],
+      "occurrenceId": "occ_336ca30571c57b73000865ad",
+      "preventiveControls": [
+        "Opaque native handles",
+        "Checked range arithmetic",
+        "Allocation lifetime registry"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Return opaque allocation IDs, keep a synchronized allocation table with base, size, and lifetime, and reject unknown, interior, freed, or overflowing ranges.",
+      "remediationTests": [
+        "Attempt unknown, interior, freed, and overflowing handles under ASan.",
+        "Property-test allocation-table lifetime and range validation."
+      ],
+      "rootCause": {
+        "summary": "Host pointer values are exposed as integers and later trusted without an allocation registry, exact-base validation, lifetime tracking, or checked offset/size bounds."
+      },
+      "ruleId": "simulated-vram-raw-address-memory-corruption",
+      "severity": {
+        "changeConditions": "Reduce to medium if the API is provably available only to fully trusted in-process code; remove when callers receive opaque handles validated against an allocation table.",
+        "level": "high",
+        "rationale": "A public API caller can convert chosen integers into native free/write targets, crossing the intended opaque-allocation boundary and directly corrupting process memory."
+      },
+      "summary": "The public simulated_vram_free and simulated_vram_write APIs cast integer addresses supplied by the caller directly to host pointers, then call free or memcpy without allocation ownership or range validation.",
+      "taxonomy": {
+        "category": "arbitrary native memory write/free",
+        "cwe": [
+          "CWE-123",
+          "CWE-763"
+        ]
+      },
+      "title": "Simulated VRAM APIs free and write arbitrary caller-provided addresses",
+      "validation": {
+        "counterEvidence": [
+          "Null and zero-length operations are ignored.",
+          "A cooperative caller can pass only exact live addresses returned by allocate."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The documented API exposes allocate/free/write operations.",
+          "free casts the caller integer and invokes free.",
+          "write casts the caller integer and copies caller-controlled size bytes."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "free ignores its size argument and writes check only nonzero address/size/source before memcpy. Cooperative use is safe but not enforced by the public boundary."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Every ordinary write, replace, and build has a blocking approval callback.",
+          "Missing approval fails closed.",
+          "Read-only tasks reject mutation actions.",
+          "The truncation is visibly indicated."
+        ],
+        "dataflow": {
+          "outcome": "User-authorized source or build configuration differs materially from what was reviewed",
+          "sink": "writeAtomically on the active project",
+          "source": "A write or replace action containing a benign prefix and concealed suffix",
+          "transformations": [
+            "payload preview truncated",
+            "Boolean approval captured",
+            "full payload transformed and committed"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Concealed source/build changes can later execute with user privileges."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires social engineering through a visible truncation and later execution."
+        },
+        "preconditions": [
+          "The user approves the displayed truncated mutation"
+        ],
+        "reachability": {
+          "attacker": "An untrusted or compromised configured model endpoint",
+          "entrypoint": "A write or replace action containing a benign prefix and concealed suffix",
+          "outcome": "User-authorized source or build configuration differs materially from what was reviewed",
+          "preconditions": [
+            "The user approves the displayed truncated mutation"
+          ],
+          "sink": "writeAtomically on the active project",
+          "summary": "The same action object supplies both the truncated preview and the complete committed payload."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_38d0ac0e22c7760f4a5b0853",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:9af3fa4c44767df23e6f81c015c36329d3ee7fa0eae01451781a5f83a294d74a"
+      },
+      "identity": {
+        "anchor": "agent-mutation-approval-truncation"
+      },
+      "locations": [
+        {
+          "endLine": 460,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "write approval and commit path",
+          "startLine": 373
+        },
+        {
+          "endLine": 1205,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "preview truncation",
+          "startLine": 1199
+        },
+        {
+          "endLine": 394,
+          "path": "windows/src/kr/compile/KrAgentCore.java",
+          "role": "desktop write approval path",
+          "startLine": 315
+        },
+        {
+          "endLine": 394,
+          "path": "linux/src/kr/compile/KrAgentCore.java",
+          "role": "desktop write approval path",
+          "startLine": 315
+        }
+      ],
+      "occurrenceId": "occ_dd2604567dd1d9ffef3443d8",
+      "preventiveControls": [
+        "Hash-bound approvals",
+        "Complete diff viewer",
+        "Canonical target display"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Compute final bytes first and approve a full scrollable diff bound to canonical path, old hash, new hash, and replacement count; verify the old hash immediately before commit.",
+      "remediationTests": [
+        "Approve/reject payloads around the preview boundary and assert the full diff is reviewable.",
+        "Verify approval hashes fail if content or target changes before commit."
+      ],
+      "rootCause": {
+        "summary": "Approval is bound to a truncated textual preview of inputs rather than the complete canonical path and exact resulting file bytes."
+      },
+      "ruleId": "agent-mutation-approval-truncation",
+      "severity": {
+        "changeConditions": "Raise to high if approved changes are automatically executed; reduce to low if approval is bound to a complete diff and cryptographic hashes but the UI has only a cosmetic omission.",
+        "level": "medium",
+        "rationale": "An untrusted endpoint can conceal materially different code after a benign prefix, but the user still sees a truncation marker and must approve the mutation, with execution generally requiring another build/run action."
+      },
+      "summary": "Write and replace dialogs show at most 1,500 characters of each model-controlled field, but writeAtomically can commit payloads approaching 1 MiB; replace also transforms and globally applies fields not represented as a final diff.",
+      "taxonomy": {
+        "category": "misleading security approval",
+        "cwe": [
+          "CWE-451"
+        ]
+      },
+      "title": "Agent mutation approvals omit most bytes that are subsequently committed",
+      "validation": {
+        "counterEvidence": [
+          "Every ordinary write, replace, and build has a blocking approval callback.",
+          "Missing approval fails closed.",
+          "Read-only tasks reject mutation actions.",
+          "The truncation is visibly indicated."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The preview helper truncates to 1,500 characters.",
+          "The commit path accepts substantially larger content.",
+          "Dialogs return a single Boolean for the truncated detail.",
+          "Replace shows raw fields rather than the final diff and affected count."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "preview truncates at 1,500 characters while network/action and write limits are much larger; replace can affect all occurrences after transformations."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Same-name files are overwritten.",
+          "Local filesystem projects do not use this cache.",
+          "A separate compiler cache cleanup does not affect this workspace."
+        ],
+        "dataflow": {
+          "outcome": "Disclosure of prior-project source or configuration",
+          "sink": "askModel HTTP request",
+          "source": "A stale relative filename left by a prior SAF import",
+          "transformations": [
+            "new project overlaid into fixed cache",
+            "model lists or requests stale path",
+            "content appended to conversation"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Confidential data from one project is disclosed while another project is active."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires sequential project use and an agent request for residual content."
+        },
+        "preconditions": [
+          "Project A leaves a file absent from project B",
+          "The user starts an agent task for project B"
+        ],
+        "reachability": {
+          "attacker": "An untrusted configured model endpoint after the user switches SAF projects",
+          "entrypoint": "A stale relative filename left by a prior SAF import",
+          "outcome": "Disclosure of prior-project source or configuration",
+          "preconditions": [
+            "Project A leaves a file absent from project B",
+            "The user starts an agent task for project B"
+          ],
+          "sink": "askModel HTTP request",
+          "summary": "No cleanup or per-URI namespace exists between imports."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_ee91b834bc632afdc60c999c",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:7c1dde602b45d939a3753caba8b05a44e1253e60d1355cb833fe06ef7dc8dda0"
+      },
+      "identity": {
+        "anchor": "saf-agent-workspace-stale-data"
+      },
+      "locations": [
+        {
+          "endLine": 286,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "fixed reusable SAF workspace",
+          "startLine": 267
+        },
+        {
+          "endLine": 35,
+          "path": "android/app/src/main/java/kr/compile/DocumentTree.java",
+          "role": "overlay import without stale-entry removal",
+          "startLine": 23
+        },
+        {
+          "endLine": 576,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "stale project listing/read reaches agent",
+          "startLine": 529
+        }
+      ],
+      "occurrenceId": "occ_e482b2707f75f1874142a686",
+      "preventiveControls": [
+        "Per-project cache namespaces",
+        "Atomic workspace replacement",
+        "Cleanup-on-switch tests"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Use a fresh uniquely named workspace per tree/run or securely clear the exact app-private cache before import; bind lifetime to the persisted tree URI and fail closed on cleanup errors.",
+      "remediationTests": [
+        "Import A then B with disjoint files and assert no A path exists.",
+        "Inject cleanup failures and assert agent startup aborts."
+      ],
+      "rootCause": {
+        "summary": "A fixed app-private cache is reused across project identities, and the importer creates/overwrites current entries but never removes previous-only entries."
+      },
+      "ruleId": "saf-agent-workspace-stale-data",
+      "severity": {
+        "changeConditions": "Raise to high if project switching is frequent with untrusted endpoints and stale names are enumerable; remove when workspaces are fresh or atomically cleared and URI-bound.",
+        "level": "medium",
+        "rationale": "The flaw crosses project confidentiality boundaries, but requires a project switch and an agent task that names or discovers a stale file."
+      },
+      "summary": "Every SAF-backed agent task reuses files/saf_agent_workspace and overlays the active tree without deleting entries absent from the new project. Stale files remain listable and readable by the model.",
+      "taxonomy": {
+        "category": "cross-project residual data exposure",
+        "cwe": [
+          "CWE-226"
+        ]
+      },
+      "title": "Android SAF agent workspace retains files from previously opened projects",
+      "validation": {
+        "counterEvidence": [
+          "Same-name files are overwritten.",
+          "Local filesystem projects do not use this cache.",
+          "A separate compiler cache cleanup does not affect this workspace."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The workspace path is constant.",
+          "importProject recursively copies provider entries but has no deletion pass.",
+          "Agent list/read operates over the reused root."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "Repository-wide references show no project-switch cleanup for saf_agent_workspace; a file unique to project A survives import of project B and remains in the agent root."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The default endpoint is HTTPS.",
+          "Android rejects most obvious remote HTTP URLs.",
+          "Tokens are held only in session memory.",
+          "HTTP may be intended for local model servers."
+        ],
+        "dataflow": {
+          "outcome": "Credential/source disclosure and model-response tampering",
+          "sink": "Remote network peer receiving HTTP",
+          "source": "A configured cleartext model endpoint",
+          "transformations": [
+            "URL accepted",
+            "bearer header and conversation serialized",
+            "request transmitted without TLS"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Bearer tokens and proprietary project context can be stolen; active attackers can return deceptive actions."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires non-default endpoint configuration and network position."
+        },
+        "preconditions": [
+          "The user configures HTTP or a misleading Android URL passes the prefix check"
+        ],
+        "reachability": {
+          "attacker": "A network-adjacent or on-path attacker",
+          "entrypoint": "A configured cleartext model endpoint",
+          "outcome": "Credential/source disclosure and model-response tampering",
+          "preconditions": [
+            "The user configures HTTP or a misleading Android URL passes the prefix check"
+          ],
+          "sink": "Remote network peer receiving HTTP",
+          "summary": "No cryptographic transport requirement intervenes after configuration."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_7c21a58fb5de7819befa9faf",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:ddb4f3ac9593587a3b30fac4483cd1bbee0624e40dd7f6cbd4ba9056de9116a8"
+      },
+      "identity": {
+        "anchor": "agent-cleartext-http-credentials"
+      },
+      "locations": [
+        {
+          "endLine": 503,
+          "path": "windows/src/kr/compile/KrAgentCore.java",
+          "role": "HTTP connection with bearer token and messages",
+          "startLine": 472
+        },
+        {
+          "endLine": 503,
+          "path": "linux/src/kr/compile/KrAgentCore.java",
+          "role": "HTTP connection with bearer token and messages",
+          "startLine": 472
+        },
+        {
+          "endLine": 255,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "prefix-based cleartext allowance",
+          "startLine": 247
+        },
+        {
+          "endLine": 583,
+          "path": "android/app/src/main/java/kr/compile/KrAgentCore.java",
+          "role": "Android request sink",
+          "startLine": 552
+        },
+        {
+          "path": "android/app/src/main/AndroidManifest.xml",
+          "role": "global cleartext enablement",
+          "startLine": 10
+        }
+      ],
+      "occurrenceId": "occ_9742dc24f4d43160f022557d",
+      "preventiveControls": [
+        "Central transport-policy validator",
+        "TLS-only credential transport",
+        "Network security configuration"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Require HTTPS whenever a token is present and for every non-loopback endpoint; parse and resolve the URI, restrict any tokenless exception to loopback, and disable global cleartext where possible.",
+      "remediationTests": [
+        "Reject userinfo, DNS-prefix, IPv6, redirect, and public-host HTTP bypasses.",
+        "Assert Authorization is never attached to cleartext requests."
+      ],
+      "rootCause": {
+        "summary": "Transport policy is not tied to a parsed and authenticated endpoint: desktop has no scheme guard, Android uses textual prefixes, and credentials are not withheld on cleartext connections."
+      },
+      "ruleId": "agent-cleartext-http-credentials",
+      "severity": {
+        "changeConditions": "Raise to high if HTTP is the documented/default deployment path on shared networks; reduce to low if cleartext is limited to tokenless loopback by parsed resolved address.",
+        "level": "medium",
+        "rationale": "An on-path attacker can steal tokens and source or alter model commands, but exploitation requires a user-configured HTTP endpoint or an Android endpoint that passes the permissive check."
+      },
+      "summary": "Windows and Linux accept arbitrary HttpURLConnection endpoints without HTTPS enforcement. Android enables cleartext and uses string-prefix checks that can misclassify public hosts, while all variants attach bearer credentials and project conversation content.",
+      "taxonomy": {
+        "category": "cleartext transmission of credentials and source",
+        "cwe": [
+          "CWE-319"
+        ]
+      },
+      "title": "Agent credentials and project context can be sent over cleartext HTTP",
+      "validation": {
+        "counterEvidence": [
+          "The default endpoint is HTTPS.",
+          "Android rejects most obvious remote HTTP URLs.",
+          "Tokens are held only in session memory.",
+          "HTTP may be intended for local model servers."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "Desktop validation checks only nonempty endpoint text.",
+          "HttpURLConnection sends the bearer header and message body.",
+          "Android permits broad 10.*, 172.*, and 192.168.* textual prefixes and enables cleartext globally."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "askModel attaches Authorization and serialized history to the configured URL. Defaults are HTTPS, but source controls do not prevent the unsafe configuration."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Ignored build and metadata directory names reduce incidental packaging.",
+          "The user must create a runner artifact.",
+          "Disclosure generally occurs only when the artifact is shared or inspected by another party."
+        ],
+        "dataflow": {
+          "outcome": "Out-of-project files are disclosed with the generated artifact",
+          "sink": "assets/kr-project-data.zip in the runner APK",
+          "source": "A file or directory symlink inside the project",
+          "transformations": [
+            "recursive packaging follows the target",
+            "external bytes assigned the link-relative archive name",
+            "archive embedded in generated APK"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Readable secrets or unrelated source can be packaged and disclosed."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires preserved symlinks plus artifact exposure."
+        },
+        "preconditions": [
+          "The project representation preserves the symlink",
+          "The user builds and shares or otherwise exposes the runner APK"
+        ],
+        "reachability": {
+          "attacker": "A malicious project author",
+          "entrypoint": "A file or directory symlink inside the project",
+          "outcome": "Out-of-project files are disclosed with the generated artifact",
+          "preconditions": [
+            "The project representation preserves the symlink",
+            "The user builds and shares or otherwise exposes the runner APK"
+          ],
+          "sink": "assets/kr-project-data.zip in the runner APK",
+          "summary": "No real-path boundary is checked before the external bytes are read."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_50b29996478c0d5ae1330758",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c12b1eed141312e861c28c2a9742221aba1edd7a1970c88584be0d7264564d7d"
+      },
+      "identity": {
+        "anchor": "runner-project-symlink-content-leak"
+      },
+      "locations": [
+        {
+          "endLine": 139,
+          "path": "android/app/src/main/java/kr/compile/RunnerPackager.java",
+          "role": "recursive packaging follows links",
+          "startLine": 123
+        },
+        {
+          "endLine": 663,
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "desktop project archive follows links",
+          "startLine": 650
+        },
+        {
+          "endLine": 698,
+          "path": "linux/src/kr/compile/CompilerEngine.java",
+          "role": "desktop project archive follows links",
+          "startLine": 685
+        }
+      ],
+      "occurrenceId": "occ_d3aadde9f3b0e631b51107d0",
+      "preventiveControls": [
+        "Link-safe artifact inventory",
+        "Canonical read boundary",
+        "Artifact content manifest"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Walk project resources without following links, reject every symbolic-link component, and require each real file path to remain below the canonical project root before reading.",
+      "remediationTests": [
+        "Package projects with file, directory, junction, and chained symlinks and assert rejection.",
+        "Inspect resulting ZIPs to ensure only canonical in-root files appear."
+      ],
+      "rootCause": {
+        "summary": "Packagers derive an in-project archive name from the link path but open the link target through ordinary FileInputStream without final real-path containment."
+      },
+      "ruleId": "runner-project-symlink-content-leak",
+      "severity": {
+        "changeConditions": "Raise to high if generated APKs are automatically uploaded; remove when packaging uses NOFOLLOW_LINKS and canonical-root checks for every entry.",
+        "level": "medium",
+        "rationale": "The flaw can disclose arbitrary user-readable files in a shareable runner artifact, but requires a symlink-bearing project and the user to build and distribute or inspect that APK."
+      },
+      "summary": "Android, Windows, and Linux project packagers recursively classify and read File entries without rejecting symbolic links or checking their real path against the project root. Linked external files are copied into kr-project-data.zip and then into a generated APK.",
+      "taxonomy": {
+        "category": "symlink-following artifact data exposure",
+        "cwe": [
+          "CWE-59"
+        ]
+      },
+      "title": "Runner packaging follows project symlinks and bundles out-of-project files",
+      "validation": {
+        "counterEvidence": [
+          "Ignored build and metadata directory names reduce incidental packaging.",
+          "The user must create a runner artifact.",
+          "Disclosure generally occurs only when the artifact is shared or inspected by another party."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "All three packagers recurse with listFiles/isDirectory.",
+          "Files are opened with FileInputStream.",
+          "No symbolic-link test or canonical project-root check occurs before reading."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "A file symlink isFile and is read; a directory symlink isDirectory and recursively traversed. The runner extractor later treats the archive entry as ordinary project data."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Default URLs use HTTPS and versioned paths.",
+          "The Windows downloader is standalone rather than automatic startup.",
+          "The final published Android toolchain downloader verifies its resulting ZIP hash, but that hash can bless a poisoned provisioning output."
+        ],
+        "dataflow": {
+          "outcome": "Developer-host code execution and compromised build outputs",
+          "sink": "CompilerEngine executes the installed compiler and associated libraries",
+          "source": "A substituted toolchain ZIP or Termux package/index",
+          "transformations": [
+            "download accepted without independent authentication",
+            "archive extracted",
+            "presence/readiness checks pass"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Malicious compilers can steal source/signing material and poison releases."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires external source compromise plus a provisioning run; HTTPS alone narrows opportunistic tampering."
+        },
+        "preconditions": [
+          "A maintainer/developer runs the provisioning workflow during source compromise or delivery substitution"
+        ],
+        "reachability": {
+          "attacker": "An attacker controlling a referenced release asset, package index, publishing account, or defeated download trust path",
+          "entrypoint": "A substituted toolchain ZIP or Termux package/index",
+          "outcome": "Developer-host code execution and compromised build outputs",
+          "preconditions": [
+            "A maintainer/developer runs the provisioning workflow during source compromise or delivery substitution"
+          ],
+          "sink": "CompilerEngine executes the installed compiler and associated libraries",
+          "summary": "The downloaded bytes become the exact toolchain path selected for normal builds."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_059133e4d741317b45fef010",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:4698900b6df0a9d09d325cf3f4c4b07e4a4506ea43ef1d24022175d2a3e89b6b"
+      },
+      "identity": {
+        "anchor": "unauthenticated-toolchain-provisioning"
+      },
+      "locations": [
+        {
+          "endLine": 27,
+          "path": "windows/download-toolchain.ps1",
+          "role": "download and immediate unverified extraction",
+          "startLine": 19
+        },
+        {
+          "endLine": 43,
+          "path": "android/scripts/package-toolchain.ps1",
+          "role": "Termux metadata source selection",
+          "startLine": 28
+        },
+        {
+          "endLine": 88,
+          "path": "android/scripts/package-toolchain.ps1",
+          "role": "package download checks only untrusted metadata/size",
+          "startLine": 74
+        },
+        {
+          "endLine": 352,
+          "path": "android/scripts/package-toolchain.ps1",
+          "role": "extracted tools enter the published bundle",
+          "startLine": 342
+        },
+        {
+          "endLine": 91,
+          "path": "windows/src/kr/compile/ToolchainManager.java",
+          "role": "presence-only trust and later executable selection",
+          "startLine": 67
+        }
+      ],
+      "occurrenceId": "occ_df822607f313787b6839c818",
+      "preventiveControls": [
+        "Pinned hashes and signed provenance",
+        "Verified staging directories",
+        "Toolchain software bill of materials"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Pin and verify SHA-256 or, preferably, signed provenance rooted in a separately protected key before extraction. Authenticate Termux release metadata and verify each package digest; stage and atomically install only verified contents.",
+      "remediationTests": [
+        "Substitute wrong-digest Windows and Termux packages and assert no extraction or stamp.",
+        "Verify signed metadata, version pinning, and staging rollback."
+      ],
+      "rootCause": {
+        "summary": "Executable supply-chain inputs are accepted based on HTTPS location, mutable repository metadata, byte length, or file presence instead of repository-pinned digest or trusted signature."
+      },
+      "ruleId": "unauthenticated-toolchain-provisioning",
+      "severity": {
+        "changeConditions": "Raise to high if these scripts are part of an automated trusted release pipeline without independent provenance; reduce to low if artifacts are verified by a separately protected signature before these scripts run.",
+        "level": "medium",
+        "rationale": "A compromised release/package source can install compilers and libraries that later execute with developer or IDE privileges, but exploitation requires a provisioning run and upstream or delivery compromise."
+      },
+      "summary": "The Windows toolchain script downloads and extracts a release archive without any digest or signature. Android's packaging script trusts an unauthenticated Termux package index and byte length rather than cryptographic package digests before republishing executable toolchains.",
+      "taxonomy": {
+        "category": "missing executable dependency authenticity",
+        "cwe": [
+          "CWE-494"
+        ]
+      },
+      "title": "Toolchain provisioning consumes executable packages without authenticated integrity",
+      "validation": {
+        "counterEvidence": [
+          "Default URLs use HTTPS and versioned paths.",
+          "The Windows downloader is standalone rather than automatic startup.",
+          "The final published Android toolchain downloader verifies its resulting ZIP hash, but that hash can bless a poisoned provisioning output."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "Invoke-WebRequest is followed by Expand-Archive and a readiness stamp.",
+          "ToolchainManager accepts directory shape and compiler presence.",
+          "Other repository provisioning scripts demonstrate SHA-256 verification patterns omitted here."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "The Windows script contains no hash/signature step before Expand-Archive. The Android flow does not authenticate the index or verify its SHA256 field for each package."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "A user must start a build.",
+          "The UI label mentions vcpkg, which may narrow some expectations.",
+          "Package-manager flags alone cannot sandbox arbitrary malicious CMake or Make logic."
+        ],
+        "dataflow": {
+          "outcome": "Unexpected network access, dependency substitution, and execution during an ostensibly offline build",
+          "sink": "Network-capable build tool and dependency build logic",
+          "source": "A CMake, Cargo, or Go project built while online packages is disabled",
+          "transformations": [
+            "UI value passed then discarded",
+            "build tool launched with default network behavior",
+            "remote dependency resolved"
+          ]
+        },
+        "impact": {
+          "level": "medium",
+          "rationale": "The explicit trust choice is bypassed and remote code can enter a privileged build."
+        },
+        "likelihood": {
+          "level": "high",
+          "rationale": "Every affected desktop build backend retains its default network behavior."
+        },
+        "preconditions": [
+          "The user starts a dependency-capable build with the control off"
+        ],
+        "reachability": {
+          "attacker": "A project author or compromised dependency endpoint",
+          "entrypoint": "A CMake, Cargo, or Go project built while online packages is disabled",
+          "outcome": "Unexpected network access, dependency substitution, and execution during an ostensibly offline build",
+          "preconditions": [
+            "The user starts a dependency-capable build with the control off"
+          ],
+          "sink": "Network-capable build tool and dependency build logic",
+          "summary": "The source demonstrates no enforcement branch after constructor assignment."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_0e214529bc05069c2657bdd7",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:99a46c68736932dd20476d2ab1ba94799f97c56d2721902acebd2508d0f87d19"
+      },
+      "identity": {
+        "anchor": "desktop-offline-control-not-enforced"
+      },
+      "locations": [
+        {
+          "path": "windows/src/kr/compile/BuildManager.java",
+          "role": "offline-by-default value forwarded",
+          "startLine": 23
+        },
+        {
+          "endLine": 35,
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "stored but unused control",
+          "startLine": 27
+        },
+        {
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "CMake invoked without disconnected mode",
+          "startLine": 1027
+        },
+        {
+          "path": "windows/src/kr/compile/CompilerEngine.java",
+          "role": "Cargo invoked without offline mode",
+          "startLine": 1216
+        },
+        {
+          "endLine": 35,
+          "path": "linux/src/kr/compile/CompilerEngine.java",
+          "role": "duplicated stored but unused control",
+          "startLine": 27
+        },
+        {
+          "path": "linux/src/kr/compile/CompilerEngine.java",
+          "role": "Cargo invoked without offline mode",
+          "startLine": 1257
+        }
+      ],
+      "occurrenceId": "occ_868f3552c82a15beb988079e",
+      "preventiveControls": [
+        "Central build-network policy",
+        "Hermetic dependency cache tests",
+        "Optional OS network sandbox"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Consume the flag in both engines: enforce CMake disconnected mode, Cargo offline mode, GOPROXY=off, and no Git/vcpkg retrieval. Use an OS network sandbox if the control promises protection from hostile build scripts.",
+      "remediationTests": [
+        "Run each backend against a test dependency server with the option off and assert zero connections.",
+        "Verify the same projects succeed only after explicit opt-in."
+      ],
+      "rootCause": {
+        "summary": "The enforcement boolean is lost at the engine boundary; downstream tool invocations never consume it."
+      },
+      "ruleId": "desktop-offline-control-not-enforced",
+      "severity": {
+        "changeConditions": "Reduce to low if the UI is explicitly relabeled as non-security-affecting; remove when cooperative package-manager flags and, where promised, OS network isolation enforce the choice.",
+        "level": "medium",
+        "rationale": "A project or later-compromised dependency can contact remote services and execute dependency build logic despite an explicit offline choice, though the user must start a build and malicious build scripts already carry substantial authority."
+      },
+      "summary": "Both desktop UIs pass an unchecked-by-default onlineDependencies value into CompilerEngine, but the duplicated Windows and Linux engines assign the field and never read it; CMake, Cargo, and Go retain network-capable defaults.",
+      "taxonomy": {
+        "category": "ineffective security control",
+        "cwe": [
+          "CWE-693"
+        ]
+      },
+      "title": "Windows and Linux online-package opt-outs are ignored by build engines",
+      "validation": {
+        "counterEvidence": [
+          "A user must start a build.",
+          "The UI label mentions vcpkg, which may narrow some expectations.",
+          "Package-manager flags alone cannot sandbox arbitrary malicious CMake or Make logic."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The checkbox defaults off and reaches CompilerEngine.",
+          "No later read of the field occurs.",
+          "CMake, Cargo, and Go launch without the corresponding offline settings used by Android."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "Repository searches find onlineDependencies in each desktop engine only at declaration, parameter, and assignment, while the network-capable build commands omit offline controls."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Non-positive counts are rejected.",
+          "The precise excessive-shift result is compiler-dependent.",
+          "Practical quantum workloads normally use far smaller dimensions."
+        ],
+        "dataflow": {
+          "outcome": "Native heap out-of-bounds read/write",
+          "sink": "host_state access at an index beyond the allocated dimension",
+          "source": "quantum_apply_gate_sequence with excessive num_qubits",
+          "transformations": [
+            "unchecked power-of-two shift",
+            "small/wrapped state allocation",
+            "gate target composed from original count"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Potential heap corruption in the native process."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires abnormal dimensions and is compiler-dependent."
+        },
+        "preconditions": [
+          "A compiler/target exhibits a corrupting result for the undefined shift"
+        ],
+        "reachability": {
+          "attacker": "A public-library caller controlling num_qubits and uploaded gate descriptors",
+          "entrypoint": "quantum_apply_gate_sequence with excessive num_qubits",
+          "outcome": "Native heap out-of-bounds read/write",
+          "preconditions": [
+            "A compiler/target exhibits a corrupting result for the undefined shift"
+          ],
+          "sink": "host_state access at an index beyond the allocated dimension",
+          "summary": "The exported call contains no width guard before allocation or CPU application."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_d8c456273b9d793286d35daa",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:74a4937ab87a194f2a447a80c5a79b7aaa1268b438ff6cdbb37c9ede8d2b9633"
+      },
+      "identity": {
+        "anchor": "quantum-qubit-shift-overflow"
+      },
+      "locations": [
+        {
+          "endLine": 12733,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "unchecked dimension shift and allocation",
+          "startLine": 12704
+        },
+        {
+          "endLine": 13806,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "repeated shift and unchecked composed index",
+          "startLine": 13789
+        },
+        {
+          "endLine": 13806,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 13789
+        },
+        {
+          "endLine": 13806,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 13789
+        }
+      ],
+      "occurrenceId": "occ_0e9840d096eac7f82c20489d",
+      "preventiveControls": [
+        "Central checked dimension helper",
+        "Practical allocation ceilings",
+        "Sanitizer tests"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Reject num_qubits at or above the size_t bit width and impose a practical memory cap; use a checked power-of-two helper and validate every composed index against state->dimension.",
+      "remediationTests": [
+        "Test boundary counts around the machine width under ASan/UBSan.",
+        "Property-test every gate-composed index against the allocated dimension."
+      ],
+      "rootCause": {
+        "summary": "The public path validates positivity but not the machine-width/resource upper bound before shifting, and later validates targets against num_qubits rather than the actual allocated dimension."
+      },
+      "ruleId": "quantum-qubit-shift-overflow",
+      "severity": {
+        "changeConditions": "Raise to high on a supported build where a concrete num_qubits value deterministically yields a small allocation and reachable out-of-bounds write; remove after centralized shift and resource validation.",
+        "level": "medium",
+        "rationale": "The path can cause native heap corruption, but the exact result of excessive C shifting is compiler-dependent and requires an unusually large caller-supplied qubit count."
+      },
+      "summary": "Quantum APIs compute (size_t)1 << num_qubits without rejecting shifts at or above the size_t width, allocate using the resulting undefined/wrapped dimension, then compose gate indices from the original larger qubit count.",
+      "taxonomy": {
+        "category": "unchecked shift causing native bounds mismatch",
+        "cwe": [
+          "CWE-1335"
+        ]
+      },
+      "title": "Oversized qubit counts wrap state dimensions before CPU gate indexing",
+      "validation": {
+        "counterEvidence": [
+          "Non-positive counts are rejected.",
+          "The precise excessive-shift result is compiler-dependent.",
+          "Practical quantum workloads normally use far smaller dimensions."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The state dimension is computed with an unchecked shift in multiple functions.",
+          "host_state is allocated from that dimension.",
+          "Gate targets are caller-controlled and composed indices lack a final dimension check.",
+          "A sibling API explicitly rejects shifts at the type width, showing the intended control."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "On typical 64-bit builds num_qubits=64 invokes undefined shifting and can produce a tiny dimension while a target such as qubit 1 still passes and composes index 2."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "Zero and negative dimensions are rejected.",
+          "An initialized compute context is required.",
+          "Practical callers usually choose much smaller dimensions."
+        ],
+        "dataflow": {
+          "outcome": "Heap overflow or NULL dereference",
+          "sink": "writes through st->pheromone before allocation validation",
+          "source": "subqg_init_mycel or load_mycel_state",
+          "transformations": [
+            "positive dimensions multiplied in size_t",
+            "byte count wraps or allocation fails",
+            "initialization loop uses unchecked element count"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "Native memory corruption or deterministic process termination."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "Requires extreme dimensions and platform-specific allocation behavior."
+        },
+        "preconditions": [
+          "Large dimensions reach a supported initialized context"
+        ],
+        "reachability": {
+          "attacker": "A public-library caller or crafted checkpoint supplier controlling Mycel dimensions",
+          "entrypoint": "subqg_init_mycel or load_mycel_state",
+          "outcome": "Heap overflow or NULL dereference",
+          "preconditions": [
+            "Large dimensions reach a supported initialized context"
+          ],
+          "sink": "writes through st->pheromone before allocation validation",
+          "summary": "No checked multiplication or practical dimension limit intervenes."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_e29911a92097793e6c435b09",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:09f362e8a4db77bbb769e8cfe68fb38ca5d07d44c8b3d3be790c0bce92b9ae8e"
+      },
+      "identity": {
+        "anchor": "mycel-dimension-allocation-overflow"
+      },
+      "locations": [
+        {
+          "endLine": 1908,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "unchecked products and pre-check initialization",
+          "startLine": 1869
+        },
+        {
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "public dimensions checked only for positivity",
+          "startLine": 9099
+        },
+        {
+          "endLine": 1908,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 1869
+        },
+        {
+          "endLine": 1908,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 1869
+        }
+      ],
+      "occurrenceId": "occ_0c1444291f14f62dd195def6",
+      "preventiveControls": [
+        "Checked arithmetic library",
+        "Resource ceilings",
+        "Immediate allocation checks"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Use checked multiplication for every element and byte count, enforce practical per-dimension and total-memory limits, and validate each allocation before any write.",
+      "remediationTests": [
+        "Exercise overflow boundary tuples under ASan/UBSan.",
+        "Fuzz checkpoint dimensions and assert early rejection before allocation."
+      ],
+      "rootCause": {
+        "summary": "Element and byte counts are computed with unchecked multiplication, and the first allocation is used before the collective allocation-success check."
+      },
+      "ruleId": "mycel-dimension-allocation-overflow",
+      "severity": {
+        "changeConditions": "Raise to high if a small platform-specific dimension tuple is shown to deterministically produce exploitable corruption; reduce to low if strict public dimension caps precede all calls.",
+        "level": "medium",
+        "rationale": "The path can corrupt heap memory or dereference NULL, but exploitation requires very large dimensions and sufficient initialization context."
+      },
+      "summary": "mycel_initialize multiplies attacker-controlled positive T_cap, C, and K without checked arithmetic, passes potentially wrapped byte counts to malloc, and writes pheromone entries before checking that allocation.",
+      "taxonomy": {
+        "category": "integer overflow in native allocation sizing",
+        "cwe": [
+          "CWE-190"
+        ]
+      },
+      "title": "Mycel dimensions overflow allocation sizes before initialization writes",
+      "validation": {
+        "counterEvidence": [
+          "Zero and negative dimensions are rejected.",
+          "An initialized compute context is required.",
+          "Practical callers usually choose much smaller dimensions."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "The public initializer checks only dimensions > 0.",
+          "pheromone_count and byte size use unchecked products.",
+          "The pheromone loop precedes the allocation null check.",
+          "Checkpoint loading also forwards file dimensions to the initializer."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "On 64-bit targets, large positive factors can wrap the byte multiplication to a small allocation while the initialization loop retains a much larger element count."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The required length is extremely large.",
+          "Signed overflow behavior is compiler-dependent.",
+          "Supplying the corresponding input arrays may already exhaust resources."
+        ],
+        "dataflow": {
+          "outcome": "Native heap out-of-bounds write",
+          "sink": "ext[2*l+1] in the target-expansion loop",
+          "source": "compute_ctc_loss_cpu",
+          "transformations": [
+            "large L_b accepted",
+            "2*L_b+1 overflows",
+            "non-positive S reset to one"
+          ]
+        },
+        "impact": {
+          "level": "high",
+          "rationale": "If reached, native heap corruption may crash the process or worse."
+        },
+        "likelihood": {
+          "level": "low",
+          "rationale": "Extreme resource requirements and undefined signed arithmetic make practical exploitation uncertain."
+        },
+        "preconditions": [
+          "Very large dimension inputs reach the function on a compiler with the described overflow behavior"
+        ],
+        "reachability": {
+          "attacker": "A public-library caller controlling CTC dimensions and target lengths",
+          "entrypoint": "compute_ctc_loss_cpu",
+          "outcome": "Native heap out-of-bounds write",
+          "preconditions": [
+            "Very large dimension inputs reach the function on a compiler with the described overflow behavior"
+          ],
+          "sink": "ext[2*l+1] in the target-expansion loop",
+          "summary": "The export is public, but practical resource prerequisites materially lower likelihood."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_1fb3d0219d4a79f5b4ed7249",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:c030cfc101bcd1e971ffdc78e7bf49eb91db66b8b6f59ad449a951ddb488033f"
+      },
+      "identity": {
+        "anchor": "ctc-dimension-signed-overflow"
+      },
+      "locations": [
+        {
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "large caller target length accepted",
+          "startLine": 16747
+        },
+        {
+          "endLine": 16795,
+          "path": "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+          "role": "signed width overflow and undersized allocation",
+          "startLine": 16781
+        },
+        {
+          "endLine": 16795,
+          "path": "windows/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 16781
+        },
+        {
+          "endLine": 16795,
+          "path": "linux/components/cc-opencl/src/CC_OpenCL.c",
+          "role": "duplicate vulnerable implementation",
+          "startLine": 16781
+        }
+      ],
+      "occurrenceId": "occ_43eb2936ae8c6a80fdd82266",
+      "preventiveControls": [
+        "Checked DP dimension helper",
+        "Practical tensor limits",
+        "UBSan CI"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Reject L_b > (INT_MAX-1)/2, compute all dimensions with checked size_t arithmetic, and impose practical caps on T, B, V, and target length.",
+      "remediationTests": [
+        "Test arithmetic boundaries without allocating giant inputs via factored dimension helpers.",
+        "Run UBSan and allocation-failure tests."
+      ],
+      "rootCause": {
+        "summary": "A signed arithmetic expression derives the allocation width without overflow or resource checks, while the subsequent loop remains bounded by the original large length."
+      },
+      "ruleId": "ctc-dimension-signed-overflow",
+      "severity": {
+        "changeConditions": "Raise to medium or high if a realistic bounded input can reach a corrupting allocation on a supported build; remove after checked width arithmetic and practical caps.",
+        "level": "low",
+        "rationale": "The source reaches an out-of-bounds heap write, but it requires enormous dimensions, prior large input availability, and compiler-dependent signed-overflow behavior."
+      },
+      "summary": "compute_ctc_loss_cpu computes signed int S = 2 * L_b + 1 for caller-controlled large target lengths; overflow can make S non-positive, after which it is reset to one while the expansion loop still writes ext[2*l+1].",
+      "taxonomy": {
+        "category": "signed integer overflow in native allocation sizing",
+        "cwe": [
+          "CWE-190"
+        ]
+      },
+      "title": "CTC target length can overflow the dynamic-programming width",
+      "validation": {
+        "counterEvidence": [
+          "The required length is extremely large.",
+          "Signed overflow behavior is compiler-dependent.",
+          "Supplying the corresponding input arrays may already exhaust resources."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "Lengths are sign-checked but not capped for arithmetic safety.",
+          "S uses signed int multiplication/addition.",
+          "The allocation uses S while the fill loop uses L_b."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "For sufficiently large L_b, S overflows and may be normalized to one; the first target element then writes ext[1] beyond that allocation."
+      }
+    },
+    {
+      "attackPath": {
+        "controls": [
+          "The checkbox is visibly checked.",
+          "No fetch happens until the user starts a build.",
+          "Turning it off applies cooperative offline settings to the primary Android backends.",
+          "Arbitrary build definitions still require a stronger sandbox."
+        ],
+        "dataflow": {
+          "outcome": "Unexpected dependency retrieval and expanded supply-chain exposure",
+          "sink": "CMake, Cargo, or Go dependency execution",
+          "source": "A first-launch dependency-capable build",
+          "transformations": [
+            "missing preference interpreted as enabled",
+            "build backend retains network access",
+            "remote dependency content resolved"
+          ]
+        },
+        "impact": {
+          "level": "medium",
+          "rationale": "Remote dependency content can alter or execute within the build."
+        },
+        "likelihood": {
+          "level": "medium",
+          "rationale": "The behavior is default but requires an explicit user build action and is visibly represented."
+        },
+        "preconditions": [
+          "The user starts a dependency-capable build without first disabling the visible option"
+        ],
+        "reachability": {
+          "attacker": "A project author or dependency publisher",
+          "entrypoint": "A first-launch dependency-capable build",
+          "outcome": "Unexpected dependency retrieval and expanded supply-chain exposure",
+          "preconditions": [
+            "The user starts a dependency-capable build without first disabling the visible option"
+          ],
+          "sink": "CMake, Cargo, or Go dependency execution",
+          "summary": "The enabled default directly reaches backend environment and arguments."
+        }
+      },
+      "confidence": {
+        "level": "high",
+        "rationale": "The source-to-sink path and affected control were independently traced in the frozen repository revision."
+      },
+      "findingId": "csf_71f6b4c00c5b46aad5e4e302",
+      "fingerprints": {
+        "algorithm": "codex-security/v1",
+        "primary": "codex-security/v1:sha256:33ae25aeb1bc80ee3070ecffe155f935f0fed2d98c75a71cc935b96eb4e37d17"
+      },
+      "identity": {
+        "anchor": "android-online-dependencies-default-enabled"
+      },
+      "locations": [
+        {
+          "path": "android/app/src/main/java/kr/compile/BuildManager.java",
+          "role": "network access defaults enabled",
+          "startLine": 34
+        },
+        {
+          "path": "android/app/src/main/java/kr/compile/MainActivity.java",
+          "role": "missing preference defaults enabled",
+          "startLine": 163
+        },
+        {
+          "path": "android/app/src/main/java/kr/compile/CompilerEngine.java",
+          "role": "CMake disconnect only when disabled",
+          "startLine": 210
+        },
+        {
+          "path": "android/app/src/main/java/kr/compile/CompilerEngine.java",
+          "role": "Cargo network mode follows enabled default",
+          "startLine": 1072
+        },
+        {
+          "path": "android/app/src/main/java/kr/compile/CompilerEngine.java",
+          "role": "Go proxy follows enabled default",
+          "startLine": 1101
+        }
+      ],
+      "occurrenceId": "occ_b97103770f227eef28d9460c",
+      "preventiveControls": [
+        "Secure first-run defaults",
+        "Consent-before-network test",
+        "Dependency lock verification"
+      ],
+      "provenance": {
+        "source": "local_plugin"
+      },
+      "remediation": "Default both values to false, require an explicit persisted opt-in before the first network-enabled build, and describe hosts/lock integrity; use OS isolation if offline is intended against hostile scripts.",
+      "remediationTests": [
+        "On a fresh profile, assert all dependency backends make zero network connections until opt-in.",
+        "Verify preference migration preserves an explicit prior choice."
+      ],
+      "rootCause": {
+        "summary": "Both the runtime field and absent-preference fallback choose network-enabled behavior instead of requiring explicit consent."
+      },
+      "ruleId": "android-online-dependencies-default-enabled",
+      "severity": {
+        "changeConditions": "Raise to medium if network retrieval is hidden or automatic; remove when the first-launch default is off and consent precedes the first network-enabled build.",
+        "level": "low",
+        "rationale": "The default contradicts the repository's explicit opt-in objective and expands supply-chain exposure, but the checkbox visibly shows enabled and the user must choose a project and start a build."
+      },
+      "summary": "BuildManager initializes onlineDependencies to true and MainActivity uses true when the allow_online preference is absent, so first-launch CMake, Cargo, and Go builds can access the network without a prior opt-in.",
+      "taxonomy": {
+        "category": "insecure default configuration",
+        "cwe": [
+          "CWE-1188"
+        ]
+      },
+      "title": "Android enables online dependency retrieval before explicit opt-in",
+      "validation": {
+        "counterEvidence": [
+          "The checkbox is visibly checked.",
+          "No fetch happens until the user starts a build.",
+          "Turning it off applies cooperative offline settings to the primary Android backends.",
+          "Arbitrary build definitions still require a stronger sandbox."
+        ],
+        "disposition": "reportable",
+        "evidence": [
+          "BuildManager's field initializer is true.",
+          "MainActivity reads a missing preference with true.",
+          "CompilerEngine emits offline settings only when false."
+        ],
+        "method": "Independent static source review at the frozen Git revision, including caller, guard, transformation, sink, countercontrol, and prerequisite analysis.",
+        "status": "validated",
+        "summary": "The Boolean materially controls CMake disconnected mode, CARGO_NET_OFFLINE, and GOPROXY; the first-launch path selects true independently in two places."
+      }
+    }
+  ],
+  "scanId": "72827833-ad54-40b4-af70-724b81c7a9a5",
+  "schemaVersion": "1.0"
+}

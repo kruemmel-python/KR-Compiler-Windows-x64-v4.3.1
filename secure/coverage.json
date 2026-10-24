@@ -1,0 +1,127 @@
+{
+  "completeness": "partial",
+  "deferred": [
+    {
+      "id": "large-native-source-remainder",
+      "paths": [
+        "android/CC_OpenCl_Enterprise-main/src/CC_OpenCL.c",
+        "windows/components/cc-opencl/src/CC_OpenCL.c",
+        "linux/components/cc-opencl/src/CC_OpenCL.c"
+      ],
+      "reason": "The three large mirrored CC_OpenCL.c files received focused high-risk review around exported parsers, serialization, memory handles, and dimension arithmetic, but were not exhaustively audited line by line."
+    },
+    {
+      "id": "opaque-prebuilt-artifacts",
+      "paths": [
+        "windows/dist/KR-Compiler-IDE.jar",
+        "linux/dist/KR-Compiler-IDE.jar",
+        "windows/components/cc-opencl/lib/windows-x64/CC_OpenCl.dll",
+        "linux/components/cc-opencl/lib/linux-x64/libCC_OpenCL.so",
+        "android/CC_OpenCl_Enterprise-main/docs/CC_OpenCl_Enterprise_Dokumentation.pdf",
+        "android/gradle/wrapper/gradle-wrapper.jar"
+      ],
+      "reason": "Checked-in binaries, JARs, and office/PDF documents were inventoried but not reverse engineered or decompiled in this standard source scan."
+    },
+    {
+      "id": "remaining-tracked-paths",
+      "paths": [
+        "."
+      ],
+      "reason": "The standard risk-prioritized pass fully reviewed 74 of 362 tracked paths; lower-risk examples, duplicated documentation, assets, and unselected implementation files remain for a deeper variance-reducing scan."
+    }
+  ],
+  "documentType": "codex-security.coverage",
+  "excludePaths": [],
+  "explicitExclusions": [],
+  "includePaths": [
+    "."
+  ],
+  "inventoryStrategy": "repository",
+  "mode": "repository",
+  "openQuestions": [
+    {
+      "followUpPrompt": "Compare a published APK signer and contents with release provenance; rotate the identity immediately if the private key asset was shipped.",
+      "question": "Was any externally distributed official Android IDE APK built through the same-key standard workflow?"
+    },
+    {
+      "followUpPrompt": "Reproduce builds or decompile and compare exported behavior and hashes.",
+      "question": "Do checked-in prebuilt CC_OpenCL and IDE binaries exactly correspond to the reviewed source?"
+    }
+  ],
+  "scanId": "72827833-ad54-40b4-af70-724b81c7a9a5",
+  "schemaVersion": "1.0",
+  "surfaces": [
+    {
+      "disposition": "reported",
+      "id": "surface_android-signing-and-runner-identity",
+      "label": "Android signing and runner identity",
+      "notes": "Standard release flow, asset export, APK signing, fixed package identity, and installer mediation reviewed.",
+      "receiptRefs": [],
+      "riskArea": "key management and update trust"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_project-import-and-archive-extraction",
+      "label": "Project import and archive extraction",
+      "notes": "GitHub ZIP fallback, native clone ingress, safe toolchain/runner extractors, and helper extraction were compared.",
+      "receiptRefs": [],
+      "riskArea": "path traversal and resource import"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_agent-workspace-paths-approvals-and-transport",
+      "label": "Agent workspace, paths, approvals, and transport",
+      "notes": "Android, Windows, and Linux agent implementations and dialogs were reviewed end to end.",
+      "receiptRefs": [],
+      "riskArea": "confidentiality and delegated authority"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_native-adaptive-compute-entry-points",
+      "label": "Native adaptive-compute entry points",
+      "notes": "Focused review established parser, state-loading, count, pointer, and dimension vulnerabilities in the three mirrored CC_OpenCL sources.",
+      "receiptRefs": [],
+      "riskArea": "memory safety"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_compiler-build-and-artifact-packaging",
+      "label": "Compiler build and artifact packaging",
+      "notes": "Build engines, runner project packaging, output deletion, and expected project build-script execution were reviewed.",
+      "receiptRefs": [],
+      "riskArea": "filesystem and build trust"
+    },
+    {
+      "disposition": "reported",
+      "id": "surface_toolchain-and-dependency-provisioning",
+      "label": "Toolchain and dependency provisioning",
+      "notes": "Android, Windows, and Linux provisioning/download controls and selected CI configuration were compared.",
+      "receiptRefs": [],
+      "riskArea": "software supply chain"
+    },
+    {
+      "disposition": "no_issue_found",
+      "id": "surface_android-exported-components-and-runner-bridge",
+      "label": "Android exported components and runner bridge",
+      "notes": "Reviewed manifests, provider export state, runner activities, JNI paths, and safe runner ZIP extraction; no separate component-entry vulnerability was validated.",
+      "receiptRefs": [],
+      "riskArea": "component exposure"
+    },
+    {
+      "disposition": "not_applicable",
+      "id": "surface_web-service-authorization-and-browser-classes",
+      "label": "Web-service authorization and browser classes",
+      "notes": "No database-backed multi-user service, browser-rendered application, HTTP parser, or XML service boundary was present.",
+      "receiptRefs": [],
+      "riskArea": "server and browser attack classes"
+    },
+    {
+      "disposition": "needs_follow_up",
+      "id": "surface_remaining-repository-inventory",
+      "label": "Remaining repository inventory",
+      "notes": "74 of 362 tracked paths were fully reviewed; additional large source, examples, documentation, and opaque artifacts remain outside complete semantic review.",
+      "receiptRefs": [],
+      "riskArea": "residual whole-repository variance"
+    }
+  ]
+}
