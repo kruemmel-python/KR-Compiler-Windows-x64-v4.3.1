@@ -298,7 +298,8 @@ public final class CompilerEngine {
             throw new IOException("Keine C/C++ Compiler-Toolchain gefunden. Bitte stellen Sie sicher, dass der Ordner 'toolchain' im IDE-Verzeichnis vorhanden ist.");
         }
 
-        String exeName = target == Target.WINDOWS ? "programm.exe" : (target == Target.LINUX ? "programm" : "libuser.so");
+        String exeName = target == Target.WINDOWS ? artifactFileName(Target.WINDOWS)
+                : (target == Target.LINUX ? artifactFileName(Target.LINUX) : "libuser.so");
         File artifact = new File(outputDir, exeName);
 
         List<String> cmd = new ArrayList<>();
@@ -483,8 +484,8 @@ public final class CompilerEngine {
         runProcess(cmd, projectDir, buildLog);
 
         if (target == Target.LINUX) {
-            File linuxBin = new File(outputDir, "programm");
-            File exeFile = new File(outputDir, "programm.exe");
+            File linuxBin = new File(outputDir, artifactFileName(Target.LINUX));
+            File exeFile = new File(outputDir, artifactFileName(Target.WINDOWS));
             // Beim Matrix-Build kann noch die zuvor erzeugte Windows-Datei im
             // gemeinsamen Ausgabeordner liegen. Ein erfolgreich erzeugtes ELF
             // darf niemals durch dieses alte PE-Artefakt ersetzt werden.
@@ -570,7 +571,7 @@ public final class CompilerEngine {
         }
         File cppRuntime = new File(androidDir, "libc++_shared.so");
 
-        File apkArtifact = new File(outputDir, "programm-android-arm64.apk");
+        File apkArtifact = new File(outputDir, artifactFileName(Target.ANDROID));
         File unsignedApk = new File(outputDir, "kr-runner-unsigned.apk");
         File projectZip = new File(outputDir, "kr-runner-project-data.zip");
 
@@ -601,8 +602,15 @@ public final class CompilerEngine {
                     ZipEntry copy = new ZipEntry(name);
                     copy.setTime(0);
                     zos.putNextEntry(copy);
-                    int n;
-                    while ((n = zis.read(buf)) >= 0) zos.write(buf, 0, n);
+                    if (name.equals("AndroidManifest.xml")) {
+                        byte[] manifest = zis.readAllBytes();
+                        rewriteRunnerManifest(manifest, ProjectArtifactIdentity.androidPackageId(projectDir),
+                                ProjectArtifactIdentity.androidLabel(projectDir));
+                        zos.write(manifest);
+                    } else {
+                        int n;
+                        while ((n = zis.read(buf)) >= 0) zos.write(buf, 0, n);
+                    }
                     zos.closeEntry();
                 }
             }
@@ -703,6 +711,47 @@ public final class CompilerEngine {
             while ((n = in.read(buf)) >= 0) out.write(buf, 0, n);
         }
         out.closeEntry();
+    }
+
+    private String artifactFileName(Target artifactTarget) {
+        String stem = ProjectArtifactIdentity.artifactStem(projectDir);
+        if (artifactTarget == Target.WINDOWS) return stem + ".exe";
+        if (artifactTarget == Target.LINUX) return stem;
+        return stem + "-android-arm64.apk";
+    }
+
+    /**
+     * The runner's compiled manifest stores its package as a standalone UTF-16
+     * string. A project-specific id of the same length keeps the binary XML
+     * layout intact, while allowing Android to install projects side-by-side.
+     */
+    private static void rewriteRunnerManifest(byte[] manifest, String packageId, String label) throws IOException {
+        if (packageId.length() != "kr.compile.runner".length()) throw new IOException("Ungültige Android-Projektkennung.");
+        if (label.length() != "KR C++ Programm".length()) throw new IOException("Ungültiger Android-Projektname.");
+        replaceStandaloneUtf16(manifest, "kr.compile.runner", packageId);
+        replaceStandaloneUtf16(manifest, "KR C++ Programm", label);
+    }
+
+    private static void replaceStandaloneUtf16(byte[] manifest, String templateValue, String replacement) throws IOException {
+        byte[] oldValue = templateValue.getBytes(StandardCharsets.UTF_16LE);
+        byte[] newValue = replacement.getBytes(StandardCharsets.UTF_16LE);
+        int replacements = 0;
+        for (int offset = 2; offset + oldValue.length + 2 <= manifest.length; offset++) {
+            // Android binary XML UTF-16 string pools prefix short strings with
+            // their character count and terminate the entry with two zero bytes.
+            if ((manifest[offset - 2] & 0xff) != templateValue.length() || manifest[offset - 1] != 0
+                    || manifest[offset + oldValue.length] != 0 || manifest[offset + oldValue.length + 1] != 0) continue;
+            boolean matches = true;
+            for (int i = 0; i < oldValue.length; i++) {
+                if (manifest[offset + i] != oldValue[i]) { matches = false; break; }
+            }
+            if (!matches) continue;
+            System.arraycopy(newValue, 0, manifest, offset, newValue.length);
+            replacements++;
+        }
+        if (replacements != 1) {
+            throw new IOException("Android Runner-Manifest konnte nicht eindeutig personalisiert werden: " + templateValue + " (" + replacements + ").");
+        }
     }
 
     private static String findApksigner() {
@@ -1071,7 +1120,7 @@ public final class CompilerEngine {
             log.line("[INFO] Kompiliere CMake-Projekt …");
             runProcess(buildCmd, projectDir, buildLog);
 
-            File targetElf = new File(outputDir, "programm");
+            File targetElf = new File(outputDir, artifactFileName(Target.LINUX));
             File found = findFirstExecutable(cmakeBuildDir);
             if (found == null) found = findFirstExecutable(new File(projectDir, "bin"));
             if (found == null) found = findFirstExecutable(outputDir);
@@ -1150,7 +1199,7 @@ public final class CompilerEngine {
                 copyAllCMakeArtifacts(projectBin, outputDir);
             }
 
-            File targetExe = new File(outputDir, "programm.exe");
+            File targetExe = new File(outputDir, artifactFileName(Target.WINDOWS));
             File found = findFirstExecutable(cmakeBuildDir);
             if (found == null) {
                 found = findFirstExecutable(projectBin);
@@ -1162,16 +1211,16 @@ public final class CompilerEngine {
                 Files.copy(found.toPath(), targetExe.toPath(), StandardCopyOption.REPLACE_EXISTING);
             }
             if (targetExe.isFile()) {
-                File runBat = new File(outputDir, "start_programm.bat");
+                File runBat = new File(outputDir, "start_" + ProjectArtifactIdentity.artifactStem(projectDir) + ".bat");
                 String batContent = "@echo off\r\n"
                         + "chcp 65001 >nul\r\n"
-                        + "title KR Programm - programm.exe\r\n"
+                        + "title KR Programm - " + targetExe.getName() + "\r\n"
                         + "cd /d \"%~dp0\"\r\n"
                         + "echo ========================================================\r\n"
-                        + "echo   KR Programm Ausfuehrung: programm.exe\r\n"
+                        + "echo   KR Programm Ausfuehrung: " + targetExe.getName() + "\r\n"
                         + "echo ========================================================\r\n"
                         + "echo.\r\n"
-                        + "\"%~dp0programm.exe\"\r\n"
+                        + "\"%~dp0" + targetExe.getName() + "\"\r\n"
                         + "echo.\r\n"
                         + "echo --------------------------------------------------------\r\n"
                         + "echo [BEENDET] Rueckgabewert / Exit Code: %ERRORLEVEL%\r\n"
@@ -1210,7 +1259,7 @@ public final class CompilerEngine {
             return buildDirectCpp(findCppFiles(projectDir), outputDir, buildLog);
         }
 
-        String targetName = target == Target.WINDOWS ? "programm.exe" : "programm";
+        String targetName = artifactFileName(target);
         File targetFile = new File(outputDir, targetName);
         File found = findFirstExecutable(projectDir);
         if (found != null && !found.equals(targetFile)) {
@@ -1240,7 +1289,7 @@ public final class CompilerEngine {
             if (foundSo != null) Files.copy(foundSo.toPath(), userSo.toPath(), StandardCopyOption.REPLACE_EXISTING);
             return packageAndroidApk(outputDir, userSo, projectDir, false, buildLog);
         } else if (target == Target.LINUX) {
-            File artifact = new File(outputDir, "programm");
+            File artifact = new File(outputDir, artifactFileName(Target.LINUX));
             List<String> cmd = Arrays.asList(cargo, "build", "--release", "--target", "x86_64-unknown-linux-gnu");
             log.line("[INFO] Starte Cargo Release-Build (Linux) …");
             runProcess(cmd, projectDir, buildLog);
@@ -1253,7 +1302,7 @@ public final class CompilerEngine {
             }
             return artifact;
         } else {
-            File artifact = new File(outputDir, "programm.exe");
+            File artifact = new File(outputDir, artifactFileName(Target.WINDOWS));
             List<String> cmd = Arrays.asList(cargo, "build", "--release");
             log.line("[INFO] Starte Cargo Release-Build …");
             runProcess(cmd, projectDir, buildLog);
@@ -1278,13 +1327,13 @@ public final class CompilerEngine {
             runProcess(cmd, projectDir, buildLog);
             return packageAndroidApk(outputDir, userSo, projectDir, false, buildLog);
         } else if (target == Target.LINUX) {
-            File artifact = new File(outputDir, "programm");
+            File artifact = new File(outputDir, artifactFileName(Target.LINUX));
             List<String> cmd = Arrays.asList(go, "build", "-o", artifact.getAbsolutePath(), ".");
             log.line("[INFO] Starte Go Linux Build …");
             runProcess(cmd, projectDir, buildLog);
             return artifact;
         } else {
-            File artifact = new File(outputDir, "programm.exe");
+            File artifact = new File(outputDir, artifactFileName(Target.WINDOWS));
             List<String> cmd = Arrays.asList(go, "build", "-o", artifact.getAbsolutePath(), ".");
             log.line("[INFO] Starte Go Build …");
             runProcess(cmd, projectDir, buildLog);

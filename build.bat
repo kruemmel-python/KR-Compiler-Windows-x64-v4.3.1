@@ -16,7 +16,7 @@ if not exist "%~dp0runtime\jdk\bin\javac.exe" (
     echo [FEHLER] Portables JDK fehlt: runtime\jdk
     exit /b 2
 )
-powershell -NoProfile -Command "$env:TEMP='%~dp0KR_BUILD\.cache\temp'; $env:TMP=$env:TEMP; $files = (Get-ChildItem -Recurse '%~dp0src\*.java').FullName; & '%~dp0runtime\jdk\bin\javac.exe' -J-Djava.io.tmpdir='%~dp0KR_BUILD\.cache\temp' -encoding UTF-8 -d '%~dp0bin' $files"
+powershell -NoProfile -Command "$env:TEMP='%~dp0KR_BUILD\.cache\temp'; $env:TMP=$env:TEMP; $files = (Get-ChildItem -Recurse '%~dp0src\*.java').FullName; & '%~dp0runtime\jdk\bin\javac.exe' -encoding UTF-8 -d '%~dp0bin' $files"
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo [FEHLER] Kompilierung fehlgeschlagen!
