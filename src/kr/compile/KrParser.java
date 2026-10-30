@@ -8,6 +8,13 @@ import java.util.Set;
 
 public final class KrParser {
 
+    private static final Set<String> PYTHON_BUILTINS = new HashSet<>();
+    static {
+        Collections.addAll(PYTHON_BUILTINS,
+                "print", "range", "len", "abs", "min", "max", "sum",
+                "int", "float", "str", "bool", "list", "dict", "set", "tuple", "enumerate", "zip");
+    }
+
     private final String filename;
     private final String source;
     private final List<KrToken> tokens;
@@ -61,7 +68,6 @@ public final class KrParser {
                 currentLang = b.language;
                 currentGroup.add(b);
             } else {
-                // Emit segment for previous group
                 emitSegment(currentLang, currentGroup);
                 currentLang = b.language;
                 currentGroup.clear();
@@ -102,14 +108,16 @@ public final class KrParser {
             seg.calledFunctionNames.addAll(b.calledFunctions);
         }
 
-        // Also scan all tokens within this segment's span to catch any called function
+        // Scan tokens within this segment's span to catch called functions
         for (int i = 0; i < tokenCount - 1; i++) {
             KrToken tok = tokens.get(i);
             if (tok.startOffset >= startOffset && tok.endOffset <= endOffset) {
                 if (tok.type == KrTokenType.IDENTIFIER) {
                     KrToken next = tokens.get(i + 1);
                     if (next.type == KrTokenType.LPAREN) {
-                        seg.calledFunctionNames.add(tok.text);
+                        if (lang != KrLanguage.PYTHON || !PYTHON_BUILTINS.contains(tok.text)) {
+                            seg.calledFunctionNames.add(tok.text);
+                        }
                     }
                 }
             }
@@ -148,6 +156,7 @@ public final class KrParser {
 
     private KrToken peek(int offset) {
         int idx = cursor + offset;
+        if (idx < 0) return tokens.get(0);
         return idx < tokenCount ? tokens.get(idx) : tokens.get(tokenCount - 1);
     }
 
@@ -157,13 +166,31 @@ public final class KrParser {
         int startCol = first.column;
         int startOffset = first.startOffset;
 
-        // 1. Preprocessor directive: always C++
+        // 1. Preprocessor directive or Rust attribute
         if (first.type == KrTokenType.PREPROCESSOR) {
+            if (first.text.startsWith("#[") || first.text.startsWith("#![")) {
+                cursor++;
+                return new RawBlock(KrLanguage.RUST, startLine, startCol, first.line, first.column, startOffset, first.endOffset, null);
+            }
             cursor++;
             return new RawBlock(KrLanguage.CPP, startLine, startCol, first.line, first.column, startOffset, first.endOffset, null);
         }
 
-        // 2. Go-specific top-level keywords
+        // 2. Python top-level constructs: def, from
+        if (first.type == KrTokenType.KEYWORD_PYTHON) {
+            String kw = first.text;
+            if (kw.equals("def")) {
+                return parsePythonFunctionBlock(first, startLine, startCol, startOffset);
+            }
+            if (kw.equals("from") || kw.equals("pass")) {
+                cursor++;
+                int endOffset = skipToSameLineEnd(startLine);
+                KrToken lastTok = peek(-1);
+                return new RawBlock(KrLanguage.PYTHON, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, null);
+            }
+        }
+
+        // 3. Go-specific top-level keywords (and disambiguated 'import')
         if (first.type == KrTokenType.KEYWORD_GO) {
             String kw = first.text;
             if (kw.equals("package")) {
@@ -179,6 +206,20 @@ public final class KrParser {
             }
 
             if (kw.equals("import")) {
+                // Disambiguate Go `import "fmt"` / `import (...)` vs Python `import math`
+                KrToken next = peek(1);
+                KrToken next2 = peek(2);
+                boolean isGoImport = next.type == KrTokenType.LPAREN
+                        || next.type == KrTokenType.STRING_LITERAL
+                        || next.type == KrTokenType.RAW_STRING_LITERAL
+                        || (next.type == KrTokenType.IDENTIFIER && (next2.type == KrTokenType.STRING_LITERAL || next2.type == KrTokenType.RAW_STRING_LITERAL));
+                if (!isGoImport && next.type == KrTokenType.IDENTIFIER && next.line == startLine) {
+                    cursor++;
+                    int endOffset = skipToSameLineEnd(startLine);
+                    KrToken lastTok = peek(-1);
+                    return new RawBlock(KrLanguage.PYTHON, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, null);
+                }
+
                 cursor++; // skip 'import'
                 if (cursor < tokenCount && current().type == KrTokenType.LPAREN) {
                     cursor++; // skip '('
@@ -222,7 +263,7 @@ public final class KrParser {
             }
         }
 
-        // 3. Rust-specific top-level keywords
+        // 4. Rust-specific top-level keywords
         if (first.type == KrTokenType.KEYWORD_RUST) {
             String kw = first.text;
             if (kw.equals("use") || kw.equals("mod") || kw.equals("trait") || kw.equals("impl")) {
@@ -259,33 +300,198 @@ public final class KrParser {
             }
         }
 
-        // 4. C++ specific top-level keywords
+        // 5. C++ specific top-level keywords
         if (first.type == KrTokenType.KEYWORD_CPP) {
-            String kw = first.text;
             int endOffset = skipToStatementOrBlockEnd();
             KrToken lastTok = peek(-1);
             return new RawBlock(KrLanguage.CPP, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, null);
         }
 
-        // 5. Rust attributes like #[no_mangle]
+        // 6. Rust attributes like #[no_mangle]
         if (first.type == KrTokenType.UNKNOWN && first.text.equals("#") && peek(1).type == KrTokenType.LBRACKET) {
             int endOffset = skipToStatementOrBlockEnd();
             KrToken lastTok = peek(-1);
             return new RawBlock(KrLanguage.RUST, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, null);
         }
 
-        // 6. Common keywords: struct, enum
+        // 7. Common keywords: struct, enum
         if (first.text.equals("struct") || first.text.equals("enum")) {
             return parseStructOrEnumBlock(first, startLine, startCol, startOffset);
         }
 
-        // 7. General function or variable definition (e.g. C++: int foo(...) { ... })
+        // 8. General function or variable definition (e.g. C++: int foo(...) { ... })
         return parsePotentialCppOrAmbiguous(first, startLine, startCol, startOffset);
+    }
+
+    private RawBlock parsePythonFunctionBlock(KrToken defTok, int startLine, int startCol, int startOffset) {
+        int defIndentCol = defTok.column;
+        cursor++; // skip 'def'
+
+        String fnName = "";
+        if (cursor < tokenCount && (current().type == KrTokenType.IDENTIFIER || current().type == KrTokenType.KEYWORD_COMMON)) {
+            fnName = current().text;
+            cursor++;
+        }
+
+        KrFunction fn = new KrFunction(fnName, KrType.VOID, KrLanguage.PYTHON, filename, startLine, startCol, fnName);
+        boolean hasExplicitReturnType = false;
+
+        if (cursor < tokenCount && current().type == KrTokenType.LPAREN) {
+            cursor++; // skip '('
+            parsePythonParameters(fn);
+        }
+
+        if (cursor < tokenCount && current().type == KrTokenType.ARROW) {
+            cursor++; // skip '->'
+            StringBuilder retTypeSb = new StringBuilder();
+            while (cursor < tokenCount && current().type != KrTokenType.COLON && current().type != KrTokenType.LBRACE && current().type != KrTokenType.EOF) {
+                retTypeSb.append(current().text);
+                cursor++;
+            }
+            String retStr = retTypeSb.toString().trim();
+            if (retStr.equals("None")) {
+                fn.setReturnType(KrType.VOID);
+            } else {
+                fn.setReturnType(KrType.fromString(retStr));
+            }
+            hasExplicitReturnType = true;
+        }
+
+        Set<String> called = new HashSet<>();
+        int endOffset;
+
+        if (cursor < tokenCount && current().type == KrTokenType.LBRACE) {
+            // Brace-delimited Python function in .kr
+            endOffset = skipBodyBlock(called);
+        } else {
+            if (cursor < tokenCount && current().type == KrTokenType.COLON) {
+                cursor++; // skip ':'
+            }
+            int headerLine = peek(-1).line;
+            boolean sawValueReturn = false;
+
+            // Consume any tokens on the same line after ':' (single-line def)
+            while (cursor < tokenCount && current().type != KrTokenType.EOF && current().line == headerLine) {
+                KrToken t = current();
+                cursor++;
+                if (t.type == KrTokenType.COMMENT) continue;
+                if (t.text.equals("return") && cursor < tokenCount && current().line == headerLine && current().type != KrTokenType.COMMENT) {
+                    sawValueReturn = true;
+                }
+                if (t.type == KrTokenType.IDENTIFIER && current().type == KrTokenType.LPAREN && !PYTHON_BUILTINS.contains(t.text)) {
+                    called.add(t.text);
+                }
+            }
+
+            // Consume indented lines belonging to this Python function
+            int parenDepth = 0;
+            while (cursor < tokenCount && current().type != KrTokenType.EOF) {
+                KrToken tok = current();
+
+                if (tok.type == KrTokenType.COMMENT) {
+                    // Check if the next non-comment token is still indented inside this def
+                    int look = cursor + 1;
+                    while (look < tokenCount && tokens.get(look).type == KrTokenType.COMMENT) {
+                        look++;
+                    }
+                    if (look < tokenCount && tokens.get(look).type != KrTokenType.EOF && tokens.get(look).column > defIndentCol) {
+                        cursor++;
+                        continue;
+                    } else {
+                        break;
+                    }
+                }
+
+                // At the start of a line (when not inside multi-line parens), check indentation
+                int prevLine = peek(-1).line;
+                if (tok.line > prevLine && parenDepth <= 0) {
+                    if (tok.column <= defIndentCol) {
+                        break; // Dedented back to top-level -> end of Python function
+                    }
+                }
+
+                cursor++;
+                if (tok.type == KrTokenType.LPAREN || tok.type == KrTokenType.LBRACKET || tok.type == KrTokenType.LBRACE) {
+                    parenDepth++;
+                } else if (tok.type == KrTokenType.RPAREN || tok.type == KrTokenType.RBRACKET || tok.type == KrTokenType.RBRACE) {
+                    if (parenDepth > 0) parenDepth--;
+                } else if (tok.text.equals("return")) {
+                    if (cursor < tokenCount && current().line == tok.line && current().type != KrTokenType.COMMENT && !current().text.equals("None")) {
+                        sawValueReturn = true;
+                    }
+                } else if (tok.type == KrTokenType.IDENTIFIER) {
+                    if (cursor < tokenCount && current().type == KrTokenType.LPAREN && !PYTHON_BUILTINS.contains(tok.text)) {
+                        called.add(tok.text);
+                    }
+                }
+            }
+
+            if (!hasExplicitReturnType && sawValueReturn) {
+                fn.setReturnType(KrType.INT32);
+            }
+            endOffset = peek(-1).endOffset;
+        }
+
+        KrToken lastTok = peek(-1);
+        RawBlock rb = new RawBlock(KrLanguage.PYTHON, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, fn);
+        rb.calledFunctions.addAll(called);
+        return rb;
+    }
+
+    private void parsePythonParameters(KrFunction fn) {
+        while (cursor < tokenCount && current().type != KrTokenType.RPAREN && current().type != KrTokenType.EOF) {
+            if (current().type == KrTokenType.COMMA) {
+                cursor++;
+                continue;
+            }
+            if (current().type == KrTokenType.IDENTIFIER) {
+                String paramName = current().text;
+                cursor++;
+                KrType paramType = KrType.INT32; // default ABI type for untyped Python parameters
+                if (cursor < tokenCount && current().type == KrTokenType.COLON) {
+                    cursor++; // skip ':'
+                    StringBuilder typeSb = new StringBuilder();
+                    while (cursor < tokenCount
+                            && current().type != KrTokenType.COMMA
+                            && current().type != KrTokenType.RPAREN
+                            && current().type != KrTokenType.ASSIGN
+                            && current().type != KrTokenType.EOF) {
+                        typeSb.append(current().text);
+                        cursor++;
+                    }
+                    String tStr = typeSb.toString().trim();
+                    if (!tStr.isEmpty()) {
+                        paramType = KrType.fromString(tStr);
+                    }
+                }
+                // Skip optional default value `= ...`
+                if (cursor < tokenCount && current().type == KrTokenType.ASSIGN) {
+                    cursor++;
+                    while (cursor < tokenCount && current().type != KrTokenType.COMMA && current().type != KrTokenType.RPAREN && current().type != KrTokenType.EOF) {
+                        cursor++;
+                    }
+                }
+                if (!paramName.equals("self") && !paramName.equals("cls")) {
+                    fn.addParameter(paramName, paramType);
+                }
+            } else {
+                cursor++;
+            }
+        }
+        if (cursor < tokenCount && current().type == KrTokenType.RPAREN) {
+            cursor++;
+        }
+    }
+
+    private int skipToSameLineEnd(int line) {
+        while (cursor < tokenCount && current().type != KrTokenType.EOF && current().line == line) {
+            cursor++;
+        }
+        return peek(-1).endOffset;
     }
 
     private RawBlock parseStructOrEnumBlock(KrToken first, int startLine, int startCol, int startOffset) {
         cursor++; // skip struct/enum
-        // Read until closing brace
         boolean isCpp = false;
         boolean isRust = false;
 
@@ -307,10 +513,8 @@ public final class KrParser {
                     break;
                 }
             } else if (depth > 0 && tok.type == KrTokenType.COLON) {
-                // Rust field syntax: field: type
                 isRust = true;
             } else if (depth > 0 && tok.type == KrTokenType.SEMICOLON) {
-                // C++ field syntax: type field;
                 isCpp = true;
             }
         }
@@ -321,7 +525,6 @@ public final class KrParser {
     }
 
     private RawBlock parsePotentialCppOrAmbiguous(KrToken first, int startLine, int startCol, int startOffset) {
-        // Look ahead to see if this is a function definition: <type> <name>(...) { ... }
         int scan = cursor;
         boolean hasBrace = false;
         String fnName = null;
@@ -331,7 +534,6 @@ public final class KrParser {
         while (scan < tokenCount) {
             KrToken t = tokens.get(scan);
             if (t.type == KrTokenType.SEMICOLON && parenDepth == 0) {
-                // Simple statement or variable declaration e.g. int x = 0;
                 break;
             }
             if (t.type == KrTokenType.LPAREN) {
@@ -351,7 +553,6 @@ public final class KrParser {
         }
 
         if (hasBrace && fnName != null) {
-            // This is a C++ function definition!
             KrFunction fn = parseCppFunctionSignature(startLine, startCol, returnTypeName, fnName);
             Set<String> called = new HashSet<>();
             int endOffset = skipBodyBlock(called);
@@ -360,14 +561,12 @@ public final class KrParser {
             return rb;
         }
 
-        // Otherwise statement
         int endOffset = skipToStatementOrBlockEnd();
         KrToken lastTok = peek(-1);
         return new RawBlock(KrLanguage.CPP, startLine, startCol, lastTok.line, lastTok.column, startOffset, endOffset, null);
     }
 
     private KrFunction parseGoFunctionSignature(int line, int col) {
-        // Go function: func Name(param type, ...) (returnType)
         String fnName = "";
         if (current().type == KrTokenType.IDENTIFIER) {
             fnName = current().text;
@@ -381,7 +580,6 @@ public final class KrParser {
             parseGoParameters(fn);
         }
 
-        // Return type
         if (current().type == KrTokenType.IDENTIFIER || current().type == KrTokenType.KEYWORD_GO || current().type == KrTokenType.KEYWORD_COMMON) {
             KrType retType = KrType.fromString(current().text);
             cursor++;
@@ -401,11 +599,9 @@ public final class KrParser {
             if (current().type == KrTokenType.IDENTIFIER) {
                 String tokenText = current().text;
                 cursor++;
-                // In Go: `param1, param2 type` or `param type`
                 if (current().type == KrTokenType.COMMA || current().type == KrTokenType.RPAREN) {
                     paramNames.add(tokenText);
                 } else {
-                    // This tokenText was param name, and next token is type
                     paramNames.add(tokenText);
                     String typeName = current().text;
                     cursor++;
@@ -423,7 +619,6 @@ public final class KrParser {
     }
 
     private KrFunction parseRustFunctionSignature(int line, int col) {
-        // Rust function: fn name(param: type, ...) -> retType
         String fnName = "";
         if (current().type == KrTokenType.IDENTIFIER || current().type == KrTokenType.KEYWORD_COMMON) {
             fnName = current().text;
@@ -437,7 +632,6 @@ public final class KrParser {
             parseRustParameters(fn);
         }
 
-        // Return type: -> type
         if (current().type == KrTokenType.ARROW) {
             cursor++; // skip ->
             StringBuilder sb = new StringBuilder();
@@ -483,7 +677,6 @@ public final class KrParser {
         KrType retType = KrType.fromString(returnTypeName);
         KrFunction fn = new KrFunction(fnName, retType, KrLanguage.CPP, filename, line, col, fnName);
 
-        // Advance cursor until '('
         while (cursor < tokenCount && current().type != KrTokenType.LPAREN) {
             cursor++;
         }
@@ -501,7 +694,6 @@ public final class KrParser {
                 cursor++;
                 continue;
             }
-            // type followed by name
             StringBuilder typeSb = new StringBuilder();
             String paramName = "";
             while (cursor < tokenCount && current().type != KrTokenType.COMMA && current().type != KrTokenType.RPAREN) {
@@ -546,7 +738,6 @@ public final class KrParser {
                         return tok.endOffset;
                     }
                 } else if (tok.type == KrTokenType.IDENTIFIER) {
-                    // Check if this identifier is a function call: identifier '('
                     if (current().type == KrTokenType.LPAREN) {
                         calledFunctions.add(tok.text);
                     }
@@ -567,7 +758,6 @@ public final class KrParser {
             } else if (tok.type == KrTokenType.RBRACE) {
                 depth--;
                 if (depth == 0) {
-                    // Check if trailing semicolon e.g. class Foo {};
                     if (current().type == KrTokenType.SEMICOLON) {
                         int end = current().endOffset;
                         cursor++;

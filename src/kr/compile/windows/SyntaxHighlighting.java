@@ -35,10 +35,10 @@ public final class SyntaxHighlighting {
     }
 
     private static final Pattern PATTERN_KR = Pattern.compile(
-            "(/\\*.*?\\*/|//.*?$)" +
-            "|(\"(?:\\\\.|[^\"\\\\])*\")" +
-            "|\\b(fn|let|mut|if|else|while|for|in|return|struct|enum|mod|use|pub|trait|impl|match|break|continue|true|false)\\b" +
-            "|\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|bool|char|string|void)\\b" +
+            "(/\\*.*?\\*/|//.*?$|#(?!include|define|ifdef|ifndef|endif|pragma|if|else|elif|\\[).*?$)" +
+            "|(\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*')" +
+            "|\\b(fn|let|mut|if|else|while|for|in|return|struct|enum|mod|use|pub|trait|impl|match|break|continue|true|false|func|package|import|var|type|chan|defer|def|elif|pass|None|True|False|and|or|not|print|range)\\b" +
+            "|\\b(i8|i16|i32|i64|u8|u16|u32|u64|f32|f64|int|int8|int16|int32|int64|uint8|uint16|uint32|uint64|float|double|float32|float64|bool|char|string|str|void)\\b" +
             "|\\b(\\d+\\.?\\d*)\\b",
             Pattern.MULTILINE);
 

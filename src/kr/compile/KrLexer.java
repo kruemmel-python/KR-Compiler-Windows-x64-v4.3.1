@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 
 public final class KrLexer {
@@ -11,7 +12,9 @@ public final class KrLexer {
     private static final Set<String> CPP_KEYWORDS = new HashSet<>();
     private static final Set<String> RUST_KEYWORDS = new HashSet<>();
     private static final Set<String> GO_KEYWORDS = new HashSet<>();
+    private static final Set<String> PYTHON_KEYWORDS = new HashSet<>();
     private static final Set<String> COMMON_KEYWORDS = new HashSet<>();
+    private static final Set<String> CPP_PREPROCESSOR_DIRECTIVES = new HashSet<>();
 
     static {
         // C++ specific keywords
@@ -38,11 +41,21 @@ public final class KrLexer {
                 "uint8", "uint16", "uint32", "uint64", "uintptr",
                 "float32", "float64", "complex64", "complex128");
 
+        // Python specific keywords
+        Collections.addAll(PYTHON_KEYWORDS,
+                "def", "elif", "pass", "None", "True", "False", "and", "or", "not",
+                "lambda", "yield", "with", "from", "nonlocal", "except", "finally", "raise");
+
         // Common keywords
         Collections.addAll(COMMON_KEYWORDS,
                 "struct", "enum", "if", "else", "for", "while", "return", "const",
                 "break", "continue", "switch", "case", "default", "bool", "true", "false",
                 "int", "void", "char", "short", "long", "float", "double", "unsigned", "signed");
+
+        // C/C++ Preprocessor directives
+        Collections.addAll(CPP_PREPROCESSOR_DIRECTIVES,
+                "include", "define", "undef", "if", "ifdef", "ifndef", "else", "elif",
+                "endif", "pragma", "error", "warning", "line");
     }
 
     private final String source;
@@ -73,9 +86,9 @@ public final class KrLexer {
                 continue;
             }
 
-            // Preprocessor: starts with # at the beginning of a line (or with leading whitespace)
+            // Preprocessor (#include, #define, #[...]) or Python # comment
             if (c == '#') {
-                tokens.add(scanPreprocessor());
+                tokens.add(scanPreprocessorOrHashComment());
                 continue;
             }
 
@@ -111,7 +124,7 @@ public final class KrLexer {
                 continue;
             }
 
-            // Character literal
+            // Single quoted string / char literal
             if (c == '\'') {
                 tokens.add(scanCharLiteral());
                 continue;
@@ -148,7 +161,7 @@ public final class KrLexer {
         return c;
     }
 
-    private KrToken scanPreprocessor() {
+    private KrToken scanPreprocessorOrHashComment() {
         int startLine = line;
         int startCol = col;
         int startOffset = index;
@@ -167,7 +180,29 @@ public final class KrLexer {
                 break;
             }
         }
-        return new KrToken(KrTokenType.PREPROCESSOR, sb.toString().trim(), startLine, startCol, startOffset, index);
+        String text = sb.toString().trim();
+        if (isCppPreprocessorOrRustAttr(text)) {
+            return new KrToken(KrTokenType.PREPROCESSOR, text, startLine, startCol, startOffset, index);
+        }
+        return new KrToken(KrTokenType.COMMENT, text, startLine, startCol, startOffset, index);
+    }
+
+    private static boolean isCppPreprocessorOrRustAttr(String text) {
+        if (text == null || !text.startsWith("#")) return false;
+        String rest = text.substring(1).trim();
+        if (rest.startsWith("[") || rest.startsWith("![")) {
+            return true; // Rust attribute #[no_mangle] or #![allow(...)]
+        }
+        StringBuilder word = new StringBuilder();
+        for (int i = 0; i < rest.length(); i++) {
+            char ch = rest.charAt(i);
+            if (Character.isLetter(ch) || ch == '_') {
+                word.append(ch);
+            } else {
+                break;
+            }
+        }
+        return CPP_PREPROCESSOR_DIRECTIVES.contains(word.toString().toLowerCase(Locale.ROOT));
     }
 
     private KrToken scanLineComment() {
@@ -369,6 +404,8 @@ public final class KrLexer {
             type = KrTokenType.KEYWORD_RUST;
         } else if (GO_KEYWORDS.contains(text)) {
             type = KrTokenType.KEYWORD_GO;
+        } else if (PYTHON_KEYWORDS.contains(text)) {
+            type = KrTokenType.KEYWORD_PYTHON;
         } else if (COMMON_KEYWORDS.contains(text)) {
             type = KrTokenType.KEYWORD_COMMON;
         }

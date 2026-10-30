@@ -1,0 +1,58 @@
+<idea-plugin>
+  <id>kr.compile.studio.unified</id>
+  <name>KR Unified Language (C++ / Rust / Go / Python)</name>
+  <version>4.3.1</version>
+  <category>Languages</category>
+  <vendor email="ralf.kruemmel@kr-compiler.local" url="https://kr-compiler.local">Ralf Krümmel – KR Multisprachen-Technologie</vendor>
+
+  <idea-version since-build="241.0"/>
+
+  <description><![CDATA[
+    <h3>KR Unified Language Plugin für Android Studio Rabbit 2 (Canary 2 &amp; Stable)</h3>
+    <p>Verbindet <b>C++20</b> (Native), <b>Rust</b> (Rules), <b>Go</b> (Services) und <b>Python</b> (Logic) innerhalb eines einzigen Projekts über die bestehende <b>KR Unified Language Engine (v4.3.1)</b>.</p>
+    <ul>
+      <li><b>1. KR Editor Plugin:</b> Nativer Dateityp <code>.kr</code> &amp; <code>.krproject</code>, mehrsprachige Syntaxhervorhebung (C++, Rust, Go, Python), Sprachbereichserkennung, Echtzeit-Diagnose und Fehlerzuordnung auf Zeilenebene.</li>
+      <li><b>2. KR Compiler Bridge:</b> Direkte Anbindung der bestehenden KR Multi-File Pipeline, automatische Generierung von <code>kr_bridge.h</code> und sprachübergreifender ABI-Symbolauflösung.</li>
+      <li><b>3. KR Android Build Adapter:</b> Erzeugung signierter Android-ARM64-APKs, automatische Synchronisation nach <code>app/src/main/jniLibs/arm64-v8a</code>, Gradle-Task-Generator (<code>kr-android-bridge.gradle.kts</code>) und direkte ADB-Geräteausführung.</li>
+      <li><b>Python Android-Ausführungsstrategie:</b> <code>AOT_NATIVE_CPP20_BRIDGE</code> – kompiliert Python-Funktionen aus <code>.kr</code> Ahead-of-Time in native C++20/ARM64-ABI-Symbole innerhalb von <code>libuser.so</code> inklusive Android-Logcat-Anbindung.</li>
+    </ul>
+  ]]></description>
+
+  <depends>com.intellij.modules.platform</depends>
+  <depends>com.intellij.modules.lang</depends>
+
+  <extensions defaultExtensionNs="com.intellij">
+    <fileType name="KR Unified Language"
+              implementationClass="kr.compile.studio.KrStudioFileType"
+              fieldName="INSTANCE"
+              language="KR"
+              extensions="kr;krproject"/>
+    <lang.parserDefinition language="KR"
+                           implementationClass="kr.compile.studio.KrStudioParserDefinition"/>
+    <lang.syntaxHighlighterFactory language="KR"
+                                   implementationClass="kr.compile.studio.KrStudioSyntaxHighlighterFactory"/>
+    <externalAnnotator language="KR"
+                       implementationClass="kr.compile.studio.KrStudioExternalAnnotator"/>
+    <toolWindow id="KR Unified Language"
+                anchor="bottom"
+                secondary="false"
+                icon="kr.compile.studio.KrStudioIcons.KR_TOOL_WINDOW_ICON"
+                factoryClass="kr.compile.studio.KrToolWindowFactory"/>
+  </extensions>
+
+  <actions>
+    <group id="KrUnifiedLanguage.MenuGroup"
+           text="KR Unified Language (C++ / Rust / Go / Python)"
+           description="KR Unified Language Compiler &amp; Android Build Aktionen"
+           popup="true">
+      <add-to-group group-id="ToolsMenu" anchor="first"/>
+      <action id="KrUnifiedLanguage.BuildAndroid"
+              class="kr.compile.studio.KrBuildAndroidAction"/>
+      <action id="KrUnifiedLanguage.BuildAndRunDevice"
+              class="kr.compile.studio.KrBuildAndRunDeviceAction"/>
+      <separator/>
+      <action id="KrUnifiedLanguage.CreateDemoProject"
+              class="kr.compile.studio.KrCreateDemoProjectAction"/>
+    </group>
+  </actions>
+</idea-plugin>

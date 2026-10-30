@@ -2,7 +2,6 @@ package kr.compile;
 
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
@@ -10,9 +9,9 @@ import java.security.MessageDigest;
 import java.util.*;
 
 /**
- * Verwaltet die integrierte, portable Compiler-Toolchain für Windows.
+ * Verwaltet die integrierte, portable Compiler-Toolchain für Windows & Android Studio.
  * Genau wie in der Android-Version (ToolchainInstaller) macht dies die Windows IDE
- * vollkommen autark: Der Benutzer muss KEINE Compiler, SDKs oder MSYS2 vorinstallieren.
+ * und das Android Studio Plugin vollkommen autark.
  */
 public final class ToolchainManager {
 
@@ -46,19 +45,32 @@ public final class ToolchainManager {
         locateToolchain();
     }
 
+    public synchronized void setCustomCompilerHome(File homeDir) {
+        if (homeDir == null) return;
+        File candidate = homeDir.getName().equalsIgnoreCase("toolchain") ? homeDir : new File(homeDir, "toolchain");
+        if (isValidToolchain(candidate)) {
+            this.toolchainDir = candidate;
+        }
+    }
+
     private void locateToolchain() {
         File baseDir = getApplicationDirectory();
 
-        // 1. Direkt im Verzeichnis "toolchain" neben dem Programm (z.B. windows/toolchain)
-        File candidate = new File(baseDir, "toolchain");
-        if (isValidToolchain(candidate)) {
-            toolchainDir = candidate;
-            return;
-        }
+        List<File> searchRoots = new ArrayList<>();
+        String propHome = System.getProperty("kr.compiler.home");
+        if (propHome != null && !propHome.isBlank()) searchRoots.add(new File(propHome));
+        String envHome = System.getenv("KR_COMPILER_HOME");
+        if (envHome != null && !envHome.isBlank()) searchRoots.add(new File(envHome));
 
-        // 2. Im übergeordneten Ordner (falls die JAR in dist/ gestartet wurde)
+        searchRoots.add(baseDir);
         if (baseDir.getParentFile() != null) {
-            candidate = new File(baseDir.getParentFile(), "toolchain");
+            searchRoots.add(baseDir.getParentFile());
+        }
+        searchRoots.add(new File("H:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1"));
+
+        for (File root : searchRoots) {
+            if (root == null) continue;
+            File candidate = root.getName().equalsIgnoreCase("toolchain") ? root : new File(root, "toolchain");
             if (isValidToolchain(candidate)) {
                 toolchainDir = candidate;
                 return;
@@ -138,11 +150,15 @@ public final class ToolchainManager {
         String zig = getZigExecutable();
         if (zig == null || toolchainDir == null) return null;
         File wrapper = new File(new File(toolchainDir, "zig"), "zig-linux-cc.cmd");
-        try {
-            Files.writeString(wrapper.toPath(), "@echo off\r\n\"" + zig + "\" cc -target x86_64-linux-gnu %*\r\n", StandardCharsets.UTF_8);
+        if (wrapper.isFile() && zig.toLowerCase(Locale.ROOT).startsWith("h:\\kr-compiler\\")) {
             return wrapper.getAbsolutePath();
+        }
+        try {
+            File dynamicWrapper = new File(System.getProperty("java.io.tmpdir"), "kr-zig-linux-cc.cmd");
+            Files.writeString(dynamicWrapper.toPath(), "@echo off\r\n\"" + zig + "\" cc -target x86_64-linux-gnu %*\r\n", StandardCharsets.UTF_8);
+            return dynamicWrapper.getAbsolutePath();
         } catch (Exception ignored) {
-            return null;
+            return wrapper.isFile() ? wrapper.getAbsolutePath() : null;
         }
     }
 
@@ -186,11 +202,28 @@ public final class ToolchainManager {
 
     /** Accepts both an NDK installation itself and an SDK ndk/ directory containing versions. */
     private static List<File> androidNdkCandidates() {
-        String[] ndkRoots = {
-                System.getenv("ANDROID_NDK_HOME"),
-                System.getenv("NDK_HOME"),
-                System.getenv("ANDROID_NDK_ROOT")
-        };
+        List<String> ndkRoots = new ArrayList<>();
+        ndkRoots.add(System.getenv("ANDROID_NDK_HOME"));
+        ndkRoots.add(System.getenv("NDK_HOME"));
+        ndkRoots.add(System.getenv("ANDROID_NDK_ROOT"));
+
+        String androidHome = System.getenv("ANDROID_HOME");
+        if (androidHome != null && !androidHome.isBlank()) {
+            ndkRoots.add(new File(androidHome, "ndk").getAbsolutePath());
+        }
+        String sdkRoot = System.getenv("ANDROID_SDK_ROOT");
+        if (sdkRoot != null && !sdkRoot.isBlank()) {
+            ndkRoots.add(new File(sdkRoot, "ndk").getAbsolutePath());
+        }
+        String localAppData = System.getenv("LOCALAPPDATA");
+        if (localAppData != null && !localAppData.isBlank()) {
+            ndkRoots.add(new File(localAppData, "Android\\Sdk\\ndk").getAbsolutePath());
+        }
+        String userHome = System.getProperty("user.home");
+        if (userHome != null && !userHome.isBlank()) {
+            ndkRoots.add(new File(userHome, "AppData\\Local\\Android\\Sdk\\ndk").getAbsolutePath());
+        }
+
         List<File> candidates = new ArrayList<>();
         for (String root : ndkRoots) {
             if (root == null || root.isBlank()) continue;
@@ -239,7 +272,8 @@ public final class ToolchainManager {
         }
         String[] sdkRoots = {
                 System.getenv("ANDROID_HOME"),
-                System.getenv("ANDROID_SDK_ROOT")
+                System.getenv("ANDROID_SDK_ROOT"),
+                System.getProperty("user.home") != null ? System.getProperty("user.home") + "\\AppData\\Local\\Android\\Sdk" : null
         };
         for (String root : sdkRoots) {
             if (root == null) continue;
@@ -331,8 +365,8 @@ public final class ToolchainManager {
             if (goBin.isDirectory()) extra.append(goBin.getAbsolutePath()).append(File.pathSeparator);
             if (rustBin.isDirectory()) extra.append(rustBin.getAbsolutePath()).append(File.pathSeparator);
 
-            String existing = env.getOrDefault("PATH", "");
-            env.put("PATH", extra.toString() + existing);
+            String existing = getEnvPath(env);
+            setEnvPath(env, extra.toString() + existing);
 
             File goRoot = getGoRoot();
             if (goRoot != null) {
@@ -344,6 +378,32 @@ public final class ToolchainManager {
                 env.put("CC", gcc);
             }
         }
+    }
+
+    public static String getEnvPath(Map<String, String> env) {
+        if (env == null) return "";
+        String val = env.get("PATH");
+        if (val != null) return val;
+        val = env.get("Path");
+        if (val != null) return val;
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            if ("PATH".equalsIgnoreCase(e.getKey()) && e.getValue() != null) {
+                return e.getValue();
+            }
+        }
+        return "";
+    }
+
+    public static void setEnvPath(Map<String, String> env, String newPath) {
+        if (env == null) return;
+        String keyToUse = "PATH";
+        for (String k : new ArrayList<>(env.keySet())) {
+            if ("PATH".equalsIgnoreCase(k)) {
+                keyToUse = k;
+                break;
+            }
+        }
+        env.put(keyToUse, newPath);
     }
 
     public static File getApplicationDirectory() {

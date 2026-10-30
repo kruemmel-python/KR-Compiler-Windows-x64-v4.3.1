@@ -1,0 +1,9 @@
+[project]
+name = "KR_ANDROID_STUDIO_4LANG_DEMO"
+version = "1.0.0"
+edition = "2026"
+python_android_strategy = "AOT_NATIVE_CPP20_BRIDGE"
+
+[build]
+optimization = "O3"
+warnings = "all"

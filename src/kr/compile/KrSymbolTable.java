@@ -1,7 +1,6 @@
 package kr.compile;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -13,13 +12,22 @@ public final class KrSymbolTable {
     private final Map<String, KrFunction> symbols = new LinkedHashMap<>();
     private final List<KrDiagnostic> diagnostics = new ArrayList<>();
 
-    // Cross-call mappings
+    // Cross-call mappings across C++20, Rust, Go, and Python
     private final Map<String, KrFunction> cppCallsRust = new LinkedHashMap<>();
     private final Map<String, KrFunction> cppCallsGo = new LinkedHashMap<>();
+    private final Map<String, KrFunction> cppCallsPython = new LinkedHashMap<>();
+
     private final Map<String, KrFunction> rustCallsCpp = new LinkedHashMap<>();
     private final Map<String, KrFunction> rustCallsGo = new LinkedHashMap<>();
+    private final Map<String, KrFunction> rustCallsPython = new LinkedHashMap<>();
+
     private final Map<String, KrFunction> goCallsCpp = new LinkedHashMap<>();
     private final Map<String, KrFunction> goCallsRust = new LinkedHashMap<>();
+    private final Map<String, KrFunction> goCallsPython = new LinkedHashMap<>();
+
+    private final Map<String, KrFunction> pythonCallsCpp = new LinkedHashMap<>();
+    private final Map<String, KrFunction> pythonCallsRust = new LinkedHashMap<>();
+    private final Map<String, KrFunction> pythonCallsGo = new LinkedHashMap<>();
 
     private KrFunction mainFunction = null;
 
@@ -63,12 +71,19 @@ public final class KrSymbolTable {
                     if (seg.language == KrLanguage.CPP) {
                         if (target.definingLanguage == KrLanguage.RUST) cppCallsRust.put(calledName, target);
                         else if (target.definingLanguage == KrLanguage.GO) cppCallsGo.put(calledName, target);
+                        else if (target.definingLanguage == KrLanguage.PYTHON) cppCallsPython.put(calledName, target);
                     } else if (seg.language == KrLanguage.RUST) {
                         if (target.definingLanguage == KrLanguage.CPP) rustCallsCpp.put(calledName, target);
                         else if (target.definingLanguage == KrLanguage.GO) rustCallsGo.put(calledName, target);
+                        else if (target.definingLanguage == KrLanguage.PYTHON) rustCallsPython.put(calledName, target);
                     } else if (seg.language == KrLanguage.GO) {
                         if (target.definingLanguage == KrLanguage.CPP) goCallsCpp.put(calledName, target);
                         else if (target.definingLanguage == KrLanguage.RUST) goCallsRust.put(calledName, target);
+                        else if (target.definingLanguage == KrLanguage.PYTHON) goCallsPython.put(calledName, target);
+                    } else if (seg.language == KrLanguage.PYTHON) {
+                        if (target.definingLanguage == KrLanguage.CPP) pythonCallsCpp.put(calledName, target);
+                        else if (target.definingLanguage == KrLanguage.RUST) pythonCallsRust.put(calledName, target);
+                        else if (target.definingLanguage == KrLanguage.GO) pythonCallsGo.put(calledName, target);
                     }
                 }
             }
@@ -76,7 +91,6 @@ public final class KrSymbolTable {
     }
 
     private void validateCrossCall(KrSegment callerSegment, KrFunction target) {
-        // Validate return type
         if (target.returnType.kind == KrType.Kind.UNKNOWN) {
             diagnostics.add(new KrDiagnostic(KrDiagnostic.Severity.WARNING,
                     "Sprachübergreifender Aufruf von '" + target.name + "': Rückgabetyp '"
@@ -84,7 +98,6 @@ public final class KrSymbolTable {
                     callerSegment.file, callerSegment.startLine, callerSegment.startCol));
         }
 
-        // Validate parameter types
         for (KrFunction.Parameter p : target.parameters) {
             if (p.type.kind == KrType.Kind.UNKNOWN) {
                 diagnostics.add(new KrDiagnostic(KrDiagnostic.Severity.WARNING,
@@ -101,29 +114,50 @@ public final class KrSymbolTable {
 
     public Map<String, KrFunction> getCppCallsRust() { return cppCallsRust; }
     public Map<String, KrFunction> getCppCallsGo() { return cppCallsGo; }
+    public Map<String, KrFunction> getCppCallsPython() { return cppCallsPython; }
+
     public Map<String, KrFunction> getRustCallsCpp() { return rustCallsCpp; }
     public Map<String, KrFunction> getRustCallsGo() { return rustCallsGo; }
+    public Map<String, KrFunction> getRustCallsPython() { return rustCallsPython; }
+
     public Map<String, KrFunction> getGoCallsCpp() { return goCallsCpp; }
     public Map<String, KrFunction> getGoCallsRust() { return goCallsRust; }
+    public Map<String, KrFunction> getGoCallsPython() { return goCallsPython; }
+
+    public Map<String, KrFunction> getPythonCallsCpp() { return pythonCallsCpp; }
+    public Map<String, KrFunction> getPythonCallsRust() { return pythonCallsRust; }
+    public Map<String, KrFunction> getPythonCallsGo() { return pythonCallsGo; }
 
     public boolean isExported(String name) {
         if (name == null) return false;
         return cppCallsRust.containsKey(name)
                 || cppCallsGo.containsKey(name)
+                || cppCallsPython.containsKey(name)
                 || rustCallsCpp.containsKey(name)
                 || rustCallsGo.containsKey(name)
+                || rustCallsPython.containsKey(name)
                 || goCallsCpp.containsKey(name)
-                || goCallsRust.containsKey(name);
+                || goCallsRust.containsKey(name)
+                || goCallsPython.containsKey(name)
+                || pythonCallsCpp.containsKey(name)
+                || pythonCallsRust.containsKey(name)
+                || pythonCallsGo.containsKey(name);
     }
 
     public Set<KrFunction> getAllExportedFunctions() {
         Set<KrFunction> set = new HashSet<>();
         set.addAll(cppCallsRust.values());
         set.addAll(cppCallsGo.values());
+        set.addAll(cppCallsPython.values());
         set.addAll(rustCallsCpp.values());
         set.addAll(rustCallsGo.values());
+        set.addAll(rustCallsPython.values());
         set.addAll(goCallsCpp.values());
         set.addAll(goCallsRust.values());
+        set.addAll(goCallsPython.values());
+        set.addAll(pythonCallsCpp.values());
+        set.addAll(pythonCallsRust.values());
+        set.addAll(pythonCallsGo.values());
         return set;
     }
 }

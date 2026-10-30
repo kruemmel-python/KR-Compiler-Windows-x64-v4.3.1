@@ -1,15 +1,40 @@
-# KR Compiler IDE – Windows Desktop Edition (v4.3.1)
+# KR Compiler IDE – Windows Desktop Edition & Android Studio Unified Plugin (v4.3.1)
 
 **Entwickler:** Ralf Krümmel  
-**Version:** 4.3.1
-**Plattform:** Windows x64 (10 / 11)  
-**Technologie:** Java 17+ (Swing Native Dark UI), Clang/LLVM, Rust (cargo/rustc), Go, CMake, Ninja, vcpkg  
+**Version:** 4.3.1 (4-Sprachen-Edition: C++20 · Rust · Go · Python)  
+**Plattform:** Windows x64 (10 / 11) & Android Studio (Rabbit 2 / Rabbit 3 / 2024.x–2026.x+)  
+**Technologie:** Java 17/21+ (Swing Native Dark UI & IntelliJ Platform Plugin SDK), Clang/LLVM, Rust (cargo/rustc), Go, Python AOT Bridge (`AOT_NATIVE_CPP20_BRIDGE`), Zig, CMake, Ninja, Android NDK  
 
 ---
 
 ## 🌟 Übersicht
 
-Die **KR Compiler IDE Windows Desktop Edition** ist die direkte 1-zu-1-Desktop-Implementierung der mobilen Android-Entwicklungsumgebung. Sämtliche Kernmodule – von der **KR Unified Language Multi-File Pipeline** über den **autonomen KI-Programmierassistenten („AGENT“)** bis hin zur **Multi-Target-Kompilierung** – wurden vollständig nativ für Windows portiert und lauffähig bereitgestellt.
+Die **KR Compiler IDE Windows Desktop Edition (v4.3.1)** vereint **vier Programmiersprachen (C++20, Rust, Go und Python)** innerhalb einer einzigen `.kr`-Quelldatei über eine gemeinsame ABI-Sprachfusion (`kr_bridge.h`) und kompiliert Projekte ohne manuelles FFI/JNI-Boilerplate direkt in:
+- **Android ARM64 APKs** (`-android-arm64.apk` + `app/src/main/jniLibs/arm64-v8a/libuser.so`),
+- **Windows x64 Executables** (`.exe`),
+- **Linux x64 Binaries** (`ELF`).
+
+Zusätzlich enthält dieses Repository das offizielle **KR Unified Language Plugin für Android Studio** (`android-studio-plugin/`), mit dem `.kr`-Projekte direkt in Android Studio Rabbit 2 / Rabbit 3 bearbeitet, diagnostiziert, gebaut und auf Android-Geräten gestartet werden können.
+
+---
+
+## ⚠️ WICHTIG FÜR ENTWICKLER & NUTZER: Voraussetzungen für das Android Studio Plugin
+
+> **Das Android Studio Plugin (`KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip`, ~356 KB) funktioniert NICHT allein ohne die KR Compiler IDE!**
+>
+> Das Plugin ist bewusst als leichtgewichtige 3-Schichten-Brücke (Editor, Compiler Bridge, Android Build Adapter) konzipiert. Es bringt keinen zweiten Compiler mit, sondern ruft im Hintergrund die **KR Compiler IDE** und deren portable **Toolchain** (`toolchain/` mit Clang++/MinGW, Rust/Cargo, Go, Zig und Android-Runner-Template) auf.
+
+### Was Sie für die Nutzung in Android Studio benötigen (Checkliste):
+
+| Nr. | Komponente | Warum erforderlich? | Bezugsquelle / Einrichtung |
+| :--- | :--- | :--- | :--- |
+| **1.** | **KR Compiler IDE (`KR-Compiler-Windows-x64-v4.3.1.zip`)** *(oder geklontes Repo inkl. `toolchain/` & `runtime/`)* | Enthält die zentrale KR 4-Sprachen-Engine (`dist/KR-Compiler-IDE.jar`), die portable Compiler-Toolchain (`toolchain/`) und die Java-Laufzeit (`runtime/jdk`). | Aus den [GitHub Releases](https://github.com/kruemmel-python/KR-Compiler-Windows-x64-v4.3.1/releases) herunterladen und z. B. nach `C:\KR-Compiler\KR-Compiler-Windows-x64-v4.3.1` oder `H:\KR-Compiler\KR-Compiler-Windows-x64-v4.3.1` entpacken *(oder im geklonten Repo `download-toolchain.ps1` + `provision-runtime.ps1` ausführen)*. |
+| **2.** | **Android Studio (2024.x – 2026.x / Rabbit 2 / Rabbit 3)** + **Android SDK & NDK** | Stellt die IDE-Oberfläche, `adb.exe` (`platform-tools`), `apksigner.bat` (`build-tools/35.0.0`) sowie den ARM64-Clang++-Compiler (`ndk/28.2.13676358`) bereit. | Im Android Studio **SDK Manager** unter *SDK Tools* das **NDK (Side by side)**, **Android SDK Build-Tools 35.0.0+** und **Android SDK Platform-Tools** aktivieren. |
+| **3.** | **KR Unified Language Plugin (`KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip`)** | Erweitert Android Studio um den `.kr`-Mehrsprachen-Editor, Echtzeit-Diagnose, Gradle-Adapter und das `KR Unified Language` Tool-Window. | In Android Studio über **`Settings → Plugins → ⚙️ → Install Plugin from Disk...`** die Datei `KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip` installieren. |
+| **4.** | **Pfad-Verknüpfung zwischen Plugin & KR Compiler IDE** | Damit das Android-Studio-Plugin weiß, wo Ihre entpackte KR Compiler IDE (`toolchain/` & `dist/`) liegt. | **Entweder** im unteren Android-Studio-ToolWindow `KR Unified Language` auf **`KR-Engine Pfad…`** klicken und den Ordner `KR-Compiler-Windows-x64-v4.3.1` auswählen, **oder** die Windows-Umgebungsvariable `KR_COMPILER_HOME` auf diesen Ordner setzen. |
+
+📘 **Ausführliches Handbuch:** Siehe [DOKUMENTATION-Android-Studio-Plugin.md](DOKUMENTATION-Android-Studio-Plugin.md) und [KR_Android_Studio_Handbuch.md](KR_Android_Studio_Handbuch.md).  
+🧪 **Fertiges 4-Sprachen-Beispielprojekt für Android Studio:** [`examples/KR_ANDROID_STUDIO_4LANG_DEMO`](examples/KR_ANDROID_STUDIO_4LANG_DEMO) (direkt über `File → Open...` in Android Studio ladbar).
 
 ---
 

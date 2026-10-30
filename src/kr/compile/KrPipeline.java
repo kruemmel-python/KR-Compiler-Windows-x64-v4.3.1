@@ -54,7 +54,9 @@ public final class KrPipeline {
         File[] children = dir.listFiles();
         if (children != null) {
             for (File child : children) {
-                if (child.getName().equals("KR_BUILD") || child.getName().equals(".git") || child.getName().equals(".gradle")) continue;
+                if (child.getName().equals("KR_BUILD") || child.getName().equals(".git")
+                        || child.getName().equals(".gradle") || child.getName().equals(".idea")
+                        || child.getName().equals("build")) continue;
                 collectKrFiles(child, result);
             }
         }
@@ -114,8 +116,6 @@ public final class KrPipeline {
         // Generate target code
         KrCodeGenerator generator = new KrCodeGenerator(symbolTable, loweredSegments, buildDir, actualGui);
         KrCodeGenerator.Result codeResult = generator.generate(config.vcpkgDependencies);
-        // Die adaptive Laufzeit referenziert OpenCL-Symbole. Sie darf nur eingebunden
-        // werden, wenn das Projekt tatsächlich GPU-fähige Operationen enthält.
         if (computePlan.hasGpuEligibleOperations()) {
             File computeRuntime = KrAdaptiveComputeCodeGenerator.generate(buildDir, computePlan);
             codeResult.cppSources.add(computeRuntime);
@@ -133,6 +133,7 @@ public final class KrPipeline {
         if (codeResult.hasCpp) result.languagesUsed.add(KrLanguage.CPP);
         if (codeResult.hasRust) result.languagesUsed.add(KrLanguage.RUST);
         if (codeResult.hasGo) result.languagesUsed.add(KrLanguage.GO);
+        if (codeResult.hasPython) result.languagesUsed.add(KrLanguage.PYTHON);
 
         return result;
     }
@@ -141,13 +142,12 @@ public final class KrPipeline {
         if (original == null || original.file == null) return original;
         String f = original.file.replace('\\', '/');
 
-        // Check if error comes from a generated file
-        if (f.endsWith("kr_cpp.cpp") || f.contains("rust_module") || f.contains("go_module")) {
+        if (f.endsWith("kr_cpp.cpp") || f.contains("rust_module") || f.contains("go_module") || f.contains("python_module")) {
             for (KrSegment seg : segments) {
                 if ((f.endsWith("kr_cpp.cpp") && seg.language == KrLanguage.CPP) ||
                     (f.contains("rust_module") && seg.language == KrLanguage.RUST) ||
-                    (f.contains("go_module") && seg.language == KrLanguage.GO)) {
-                    // Map line number relative to segment
+                    (f.contains("go_module") && seg.language == KrLanguage.GO) ||
+                    (f.contains("python_module") && seg.language == KrLanguage.PYTHON)) {
                     int mappedLine = Math.max(1, seg.startLine + Math.max(0, original.line - 1));
                     return new DiagnosticParser.Item(seg.file, mappedLine, original.column,
                             original.severity, original.message, original.rawLine);

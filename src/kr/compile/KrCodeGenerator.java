@@ -33,29 +33,41 @@ public final class KrCodeGenerator {
         public final boolean hasCpp;
         public final boolean hasRust;
         public final boolean hasGo;
+        public final boolean hasPython;
         public final File cppSource;
         public final List<File> cppSources = new ArrayList<>();
         public final File rustDir;
         public final File goDir;
+        public final File pythonDir;
+        public final File pythonBridgeCpp;
         public final File bridgeHeader;
         public final Set<String> vcpkgDependencies = new LinkedHashSet<>();
         public final KrSourceMap sourceMap;
 
         Result(boolean hasCpp, boolean hasRust, boolean hasGo, File cppSource, List<File> cppSources,
                File rustDir, File goDir, File bridgeHeader, Set<String> vcpkgDependencies) {
-            this(hasCpp, hasRust, hasGo, cppSource, cppSources, rustDir, goDir, bridgeHeader, vcpkgDependencies, new KrSourceMap());
+            this(hasCpp, hasRust, hasGo, false, cppSource, cppSources, rustDir, goDir, null, null, bridgeHeader, vcpkgDependencies, new KrSourceMap());
         }
 
         Result(boolean hasCpp, boolean hasRust, boolean hasGo, File cppSource, List<File> cppSources,
                File rustDir, File goDir, File bridgeHeader, Set<String> vcpkgDependencies, KrSourceMap sourceMap) {
+            this(hasCpp, hasRust, hasGo, false, cppSource, cppSources, rustDir, goDir, null, null, bridgeHeader, vcpkgDependencies, sourceMap);
+        }
+
+        Result(boolean hasCpp, boolean hasRust, boolean hasGo, boolean hasPython, File cppSource, List<File> cppSources,
+               File rustDir, File goDir, File pythonDir, File pythonBridgeCpp, File bridgeHeader,
+               Set<String> vcpkgDependencies, KrSourceMap sourceMap) {
             this.hasCpp = hasCpp;
             this.hasRust = hasRust;
             this.hasGo = hasGo;
+            this.hasPython = hasPython;
             this.cppSource = cppSource;
             if (cppSources != null) this.cppSources.addAll(cppSources);
             else if (cppSource != null) this.cppSources.add(cppSource);
             this.rustDir = rustDir;
             this.goDir = goDir;
+            this.pythonDir = pythonDir;
+            this.pythonBridgeCpp = pythonBridgeCpp;
             this.bridgeHeader = bridgeHeader;
             if (vcpkgDependencies != null) this.vcpkgDependencies.addAll(vcpkgDependencies);
             this.sourceMap = sourceMap != null ? sourceMap : new KrSourceMap();
@@ -70,11 +82,13 @@ public final class KrCodeGenerator {
         boolean hasCpp = false;
         boolean hasRust = false;
         boolean hasGo = false;
+        boolean hasPython = false;
 
         for (KrSegment seg : segments) {
             if (seg.language == KrLanguage.CPP) hasCpp = true;
             else if (seg.language == KrLanguage.RUST) hasRust = true;
             else if (seg.language == KrLanguage.GO) hasGo = true;
+            else if (seg.language == KrLanguage.PYTHON) hasPython = true;
         }
 
         if (!buildDir.isDirectory() && !buildDir.mkdirs()) {
@@ -88,7 +102,7 @@ public final class KrCodeGenerator {
         // 2. Generate C++ sources (modular + fallback main)
         File cppSource = null;
         List<File> cppSources = new ArrayList<>();
-        if (hasCpp || hasRust || hasGo) {
+        if (hasCpp || hasRust || hasGo || hasPython) {
             cppSource = new File(buildDir, "kr_cpp.cpp");
             cppSources = generateCppSources(cppSource, hasCpp);
         }
@@ -107,13 +121,25 @@ public final class KrCodeGenerator {
             generateGoModule(goDir);
         }
 
-        // 5. Save source map
+        // 5. Generate Python module + AOT Native C++20 Bridge if Python is used
+        File pythonDir = null;
+        File pythonBridgeCpp = null;
+        if (hasPython) {
+            KrPythonTranspiler.TranspileResult pyRes = KrPythonTranspiler.generate(buildDir, segments, symbolTable, sourceMap);
+            pythonDir = pyRes.pythonDir;
+            pythonBridgeCpp = pyRes.bridgeCppFile;
+            if (pythonBridgeCpp != null && pythonBridgeCpp.isFile()) {
+                cppSources.add(pythonBridgeCpp);
+            }
+        }
+
+        // 6. Save source map
         File sourceMapFile = new File(buildDir, "source_map.json");
         try {
             sourceMap.save(sourceMapFile);
         } catch (Exception ignored) {}
 
-        return new Result(hasCpp, hasRust, hasGo, cppSource, cppSources, rustDir, goDir, bridgeHeader, projectDependencies, sourceMap);
+        return new Result(hasCpp, hasRust, hasGo, hasPython, cppSource, cppSources, rustDir, goDir, pythonDir, pythonBridgeCpp, bridgeHeader, projectDependencies, sourceMap);
     }
 
     private void generateBridgeHeader(File destination) throws IOException {
@@ -151,12 +177,15 @@ public final class KrCodeGenerator {
         sb.append("#include <iostream>\n");
         sb.append("#include <string>\n\n");
 
-        // Declarations for Rust and Go functions callable from C++
+        // Declarations for Rust, Go, and Python functions callable from C++
         sb.append("#ifdef __cplusplus\nextern \"C\" {\n#endif\n");
         for (KrFunction fn : symbolTable.getCppCallsRust().values()) {
             appendFunctionSignature(sb, fn);
         }
         for (KrFunction fn : symbolTable.getCppCallsGo().values()) {
+            appendFunctionSignature(sb, fn);
+        }
+        for (KrFunction fn : symbolTable.getCppCallsPython().values()) {
             appendFunctionSignature(sb, fn);
         }
         sb.append("#ifdef __cplusplus\n}\n#endif\n\n");
@@ -175,9 +204,11 @@ public final class KrCodeGenerator {
             }
         }
 
-        // If main is in Rust or Go, create standard C/C++ main entry point calling KrLanguageMain
+        // If main is in Rust, Go, or Python, create standard C/C++ main entry point calling KrLanguageMain
         KrFunction main = symbolTable.getMainFunction();
-        if (main != null && (main.definingLanguage == KrLanguage.RUST || main.definingLanguage == KrLanguage.GO)) {
+        if (main != null && (main.definingLanguage == KrLanguage.RUST
+                || main.definingLanguage == KrLanguage.GO
+                || main.definingLanguage == KrLanguage.PYTHON)) {
             sb.append("\n#ifdef __cplusplus\nextern \"C\" {\n#endif\n");
             sb.append("int KrLanguageMain(void);\n");
             sb.append("#ifdef __cplusplus\n}\n#endif\n\n");
@@ -205,7 +236,7 @@ public final class KrCodeGenerator {
         }
 
         if (fileMap.size() > 1) {
-            generated.clear(); // Verwende modulare TUs statt monolithischem kr_cpp.cpp
+            generated.clear();
             File modulesDir = new File(buildDir, "modules");
             if (!modulesDir.isDirectory()) modulesDir.mkdirs();
             for (Map.Entry<String, List<KrSegment>> entry : fileMap.entrySet()) {
@@ -229,13 +260,17 @@ public final class KrCodeGenerator {
                 generated.add(modFile);
             }
 
-            if (main == null || main.definingLanguage == KrLanguage.RUST || main.definingLanguage == KrLanguage.GO) {
+            if (main == null || main.definingLanguage == KrLanguage.RUST
+                    || main.definingLanguage == KrLanguage.GO
+                    || main.definingLanguage == KrLanguage.PYTHON) {
                 File runnerFile = new File(modulesDir, "kr_runner.cpp");
                 StringBuilder rb = new StringBuilder();
                 rb.append("// KR Unified Entry Runner\n");
                 rb.append("#include \"../kr_bridge.h\"\n");
                 rb.append("#include <iostream>\n\n");
-                if (main != null && (main.definingLanguage == KrLanguage.RUST || main.definingLanguage == KrLanguage.GO)) {
+                if (main != null && (main.definingLanguage == KrLanguage.RUST
+                        || main.definingLanguage == KrLanguage.GO
+                        || main.definingLanguage == KrLanguage.PYTHON)) {
                     rb.append("#ifdef __cplusplus\nextern \"C\" {\n#endif\n");
                     rb.append("int KrLanguageMain(void);\n");
                     rb.append("#ifdef __cplusplus\n}\n#endif\n\n");
@@ -264,22 +299,21 @@ public final class KrCodeGenerator {
             throw new IOException("Rust-Verzeichnis konnte nicht erstellt werden: " + srcDir);
         }
 
-        // Cargo.toml
         String cargoToml = "[package]\nname = \"kr_rust_module\"\nversion = \"0.1.0\"\nedition = \"2021\"\n\n"
                 + "[lib]\nname = \"kr_rust\"\npath = \"src/lib.rs\"\ncrate-type = [\"staticlib\"]\n\n"
                 + "[profile.release]\nopt-level = 2\nlto = true\npanic = \"abort\"\n";
         writeText(new File(crateDir, "Cargo.toml"), cargoToml);
 
-        // src/lib.rs
         StringBuilder sb = new StringBuilder();
         sb.append("// Automatisch generiertes Rust-Modul für KR Unified Language\n");
         sb.append("#![allow(non_snake_case, unused_unsafe, dead_code, unused_variables, unused_imports)]\n\n");
         sb.append("use std::ffi::{c_char, c_int, c_void};\n\n");
 
-        // External declarations for C++ and Go functions called from Rust
+        // External declarations for C++, Go, and Python functions called from Rust
         Set<KrFunction> externCalls = new HashSet<>();
         externCalls.addAll(symbolTable.getRustCallsCpp().values());
         externCalls.addAll(symbolTable.getRustCallsGo().values());
+        externCalls.addAll(symbolTable.getRustCallsPython().values());
 
         if (!externCalls.isEmpty()) {
             sb.append("unsafe extern \"C\" {\n");
@@ -294,7 +328,6 @@ public final class KrCodeGenerator {
             }
             sb.append("}\n\n");
 
-            // Safe inline wrappers
             for (KrFunction fn : externCalls) {
                 sb.append("#[inline(always)]\n");
                 sb.append("pub fn ").append(fn.name).append("(");
@@ -315,7 +348,6 @@ public final class KrCodeGenerator {
             }
         }
 
-        // Rust segments
         for (KrSegment seg : segments) {
             if (seg.language == KrLanguage.RUST) {
                 sb.append("\n// --- Segment aus ").append(seg.file).append(":").append(seg.startLine).append(" ---\n");
@@ -353,18 +385,14 @@ public final class KrCodeGenerator {
             throw new IOException("Go-Verzeichnis konnte nicht erstellt werden: " + goDir);
         }
 
-        // go.mod
         writeText(new File(goDir, "go.mod"), "module kr.local/unified\n\ngo 1.24\n");
 
-        // 1. Collect user imports and clean segments
         Set<String> userImports = new LinkedHashSet<>();
         List<CleanedGoSegment> cleanedSegments = new ArrayList<>();
         for (KrSegment seg : segments) {
             if (seg.language == KrLanguage.GO) {
                 String code = seg.source;
-                // Strip package statement
                 code = code.replaceAll("(?m)^[ \t]*package[ \t]+[a-zA-Z0-9_]+[ \t]*\r?\n?", "");
-                // Extract multi-line import (...)
                 Matcher multiImport = Pattern.compile("(?s)[ \t]*import[ \t]*\\((.*?)\\)").matcher(code);
                 while (multiImport.find()) {
                     String inside = multiImport.group(1);
@@ -374,14 +402,12 @@ public final class KrCodeGenerator {
                     }
                 }
                 code = code.replaceAll("(?s)[ \t]*import[ \t]*\\(.*?\\)\r?\n?", "");
-                // Extract single-line import "..."
                 Matcher singleImport = Pattern.compile("(?m)^[ \t]*import[ \t]+(\"[^\"]+\")").matcher(code);
                 while (singleImport.find()) {
                     userImports.add(singleImport.group(1));
                 }
                 code = code.replaceAll("(?m)^[ \t]*import[ \t]+(\"[^\"]+\")[ \t]*\r?\n?", "");
 
-                // Export Go functions called by C++ or Rust
                 for (KrFunction fn : seg.declaredFunctions) {
                     if (symbolTable.isExported(fn.name) && !code.contains("//export " + fn.name)) {
                         code = code.replaceAll("(?m)^([ \t]*)func[ \t]+" + fn.name + "\\b",
@@ -392,16 +418,15 @@ public final class KrCodeGenerator {
             }
         }
 
-        // 2. Build main.go
         StringBuilder sb = new StringBuilder();
         sb.append("// Automatisch generiertes Go-Paket für KR Unified Language\n");
         sb.append("package main\n\n");
 
-        // Cgo preamble
         sb.append("/*\n#include <stdint.h>\n#include <stdbool.h>\n#include <stdlib.h>\n");
         Set<KrFunction> externCalls = new HashSet<>();
         externCalls.addAll(symbolTable.getGoCallsCpp().values());
         externCalls.addAll(symbolTable.getGoCallsRust().values());
+        externCalls.addAll(symbolTable.getGoCallsPython().values());
 
         for (KrFunction fn : externCalls) {
             sb.append(toCgoHeaderType(fn.returnType)).append(" ").append(fn.name).append("(");
@@ -423,7 +448,6 @@ public final class KrCodeGenerator {
         }
         sb.append("\nvar _ = unsafe.Pointer(nil)\nvar _ = fmt.Sprintf\n\n");
 
-        // Go wrappers for calling C++ / Rust functions with native Go types
         for (KrFunction fn : externCalls) {
             sb.append("func ").append(fn.name).append("(");
             for (int i = 0; i < fn.parameters.size(); i++) {
@@ -476,7 +500,6 @@ public final class KrCodeGenerator {
             }
         }
 
-        // Cleaned segments
         for (CleanedGoSegment cs : cleanedSegments) {
             sb.append("\n// --- Segment aus ").append(cs.segment.file).append(":").append(cs.segment.startLine).append(" ---\n");
             int curLine = countLines(sb.toString()) + 1;

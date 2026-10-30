@@ -3,7 +3,8 @@ package kr.compile;
 public enum KrLanguage {
     CPP("C++20", ".cpp"),
     RUST("Rust", ".rs"),
-    GO("Go", ".go");
+    GO("Go", ".go"),
+    PYTHON("Python", ".py");
 
     private final String displayName;
     private final String fileExtension;

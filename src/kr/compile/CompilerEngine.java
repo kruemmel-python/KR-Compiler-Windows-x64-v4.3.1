@@ -118,6 +118,10 @@ public final class CompilerEngine {
 
         int count = res.codeResult != null ? res.codeResult.cppSources.size() : 0;
         log.line("[INFO] Code-Generierung abgeschlossen: " + count + " Translation Unit(s) erstellt.");
+        if (res.codeResult != null && res.codeResult.hasPython && res.codeResult.pythonBridgeCpp != null) {
+            log.line("[PYTHON] Python-Segmente erkannt -> Android-Ausführungsstrategie: AOT_NATIVE_CPP20_BRIDGE ("
+                    + res.codeResult.pythonBridgeCpp.getName() + " -> native ARM64/x64 ABI).");
+        }
 
         // Rust-Kompilierung wenn im KR-Projekt verwendet
         File rustArchive = null;
@@ -129,14 +133,21 @@ public final class CompilerEngine {
                 List<String> cargoCmd;
                 if (target == Target.ANDROID) {
                     cargoCmd = Arrays.asList(cargo, "build", "--target", "aarch64-linux-android", "--release");
+                } else if (target == Target.LINUX) {
+                    cargoCmd = Arrays.asList(cargo, "build", "--target", "x86_64-unknown-linux-gnu", "--release");
                 } else {
                     cargoCmd = Arrays.asList(cargo, "build", "--release");
                 }
                 try {
                     runProcess(cargoCmd, res.codeResult.rustDir, buildLog);
-                    File a = target == Target.ANDROID
-                            ? new File(new File(res.codeResult.rustDir, "target/aarch64-linux-android/release"), "libkr_rust.a")
-                            : new File(new File(res.codeResult.rustDir, "target/release"), "libkr_rust.a");
+                    File a;
+                    if (target == Target.ANDROID) {
+                        a = new File(new File(res.codeResult.rustDir, "target/aarch64-linux-android/release"), "libkr_rust.a");
+                    } else if (target == Target.LINUX) {
+                        a = new File(new File(res.codeResult.rustDir, "target/x86_64-unknown-linux-gnu/release"), "libkr_rust.a");
+                    } else {
+                        a = new File(new File(res.codeResult.rustDir, "target/release"), "libkr_rust.a");
+                    }
                     if (!a.isFile()) {
                         a = new File(new File(res.codeResult.rustDir, "target/release"), "libkr_rust.a");
                     }
@@ -302,16 +313,27 @@ public final class CompilerEngine {
                 : (target == Target.LINUX ? artifactFileName(Target.LINUX) : "libuser.so");
         File artifact = new File(outputDir, exeName);
 
+        boolean hasStaticArchives = false;
+        for (File s : sources) {
+            if (s != null && s.getName().toLowerCase(Locale.ROOT).endsWith(".a")) {
+                hasStaticArchives = true;
+                break;
+            }
+        }
+
         List<String> cmd = new ArrayList<>();
         cmd.add(clang);
         if (useZigLinux) {
             cmd.add("c++");
             cmd.add("-target");
-            cmd.add("x86_64-linux-musl");
+            cmd.add(hasStaticArchives ? "x86_64-linux-gnu" : "x86_64-linux-musl");
+            cmd.add("-fno-sanitize=undefined");
         }
         cmd.add("-std=c++20");
         cmd.add("-O3");
-        if (!useZigLinux) cmd.add("-Wl,--allow-multiple-definition");
+        if (!useZigLinux) {
+            cmd.add("-Wl,--allow-multiple-definition");
+        }
         cmd.add("-Wno-deprecated");
 
         if (target == Target.ANDROID) {
@@ -344,7 +366,7 @@ public final class CompilerEngine {
                 if (tcLib != null) {
                     cmd.add("-L" + tcLib.getAbsolutePath());
                 }
-            } else {
+            } else if (target == Target.ANDROID) {
                 File androidDir = new File(tc, "android");
                 if (androidDir.isDirectory()) {
                     cmd.add("-L" + androidDir.getAbsolutePath());
@@ -580,13 +602,15 @@ public final class CompilerEngine {
             addProjectFiles(projectDir, zos, new byte[64 * 1024]);
         }
 
-        // 2. Unsigned APK aus Template zusammenbauen
-        try (ZipInputStream zis = new ZipInputStream(new BufferedInputStream(new FileInputStream(templateApk)));
+        // 2. Unsigned APK aus Template zusammenbauen (nutzt ZipFile statt ZipInputStream,
+        //    da OpenJDK 25 bei ZipInputStream.readLOC ueber zipalign-Padding in Local File Headers stolpert)
+        try (ZipFile zf = new ZipFile(templateApk);
              ZipOutputStream zos = new ZipOutputStream(new BufferedOutputStream(new FileOutputStream(unsignedApk)))) {
             byte[] buf = new byte[64 * 1024];
             Set<String> written = new HashSet<>();
-            ZipEntry entry;
-            while ((entry = zis.getNextEntry()) != null) {
+            Enumeration<? extends ZipEntry> entries = zf.entries();
+            while (entries.hasMoreElements()) {
+                ZipEntry entry = entries.nextElement();
                 String name = entry.getName().replace('\\', '/');
                 if (name.isEmpty() || entry.isDirectory() || name.startsWith("META-INF/")
                         || name.equals("lib/arm64-v8a/libuser.so")
@@ -602,14 +626,16 @@ public final class CompilerEngine {
                     ZipEntry copy = new ZipEntry(name);
                     copy.setTime(0);
                     zos.putNextEntry(copy);
-                    if (name.equals("AndroidManifest.xml")) {
-                        byte[] manifest = zis.readAllBytes();
-                        rewriteRunnerManifest(manifest, ProjectArtifactIdentity.androidPackageId(projectDir),
-                                ProjectArtifactIdentity.androidLabel(projectDir));
-                        zos.write(manifest);
-                    } else {
-                        int n;
-                        while ((n = zis.read(buf)) >= 0) zos.write(buf, 0, n);
+                    try (InputStream entryIn = zf.getInputStream(entry)) {
+                        if (name.equals("AndroidManifest.xml")) {
+                            byte[] manifest = entryIn.readAllBytes();
+                            rewriteRunnerManifest(manifest, ProjectArtifactIdentity.androidPackageId(projectDir),
+                                    ProjectArtifactIdentity.androidLabel(projectDir));
+                            zos.write(manifest);
+                        } else {
+                            int n;
+                            while ((n = entryIn.read(buf)) >= 0) zos.write(buf, 0, n);
+                        }
                     }
                     zos.closeEntry();
                 }
@@ -645,6 +671,14 @@ public final class CompilerEngine {
             if (projectZip.isFile()) {
                 addZipFile(zos, written, "assets/kr-project-data.zip", projectZip, buf);
             }
+            File pyMod = new File(new File(outputDir, "python_module"), "kr_python_module.py");
+            if (pyMod.isFile()) {
+                addZipFile(zos, written, "assets/kr-python/kr_python_module.py", pyMod, buf);
+            }
+            File pyStrat = new File(new File(outputDir, "python_module"), "execution_strategy.json");
+            if (pyStrat.isFile()) {
+                addZipFile(zos, written, "assets/kr-python/execution_strategy.json", pyStrat, buf);
+            }
             if (isGui) {
                 ZipEntry guiEntry = new ZipEntry("assets/kr-gui-runner");
                 guiEntry.setTime(0);
@@ -653,6 +687,10 @@ public final class CompilerEngine {
                 zos.closeEntry();
             }
         }
+
+        // Optional: Wenn das Projekt ein Android-Studio-Gradle-Layout besitzt (app/src/main),
+        // synchronisiere die nativen ARM64-Bibliotheken automatisch nach app/src/main/jniLibs/arm64-v8a
+        syncAndroidStudioJniLibs(projectDir, outputDir, userSo, cppRuntime);
 
         // 3. APK signieren
         String apksigner = findApksigner();
@@ -678,13 +716,36 @@ public final class CompilerEngine {
         return apkArtifact;
     }
 
+    public void syncAndroidStudioJniLibs(File projectRoot, File outputDir, File userSo, File cppRuntime) {
+        try {
+            File appMain = new File(projectRoot, "app/src/main");
+            File jniArm64 = new File(projectRoot, "app/src/main/jniLibs/arm64-v8a");
+            if (!appMain.isDirectory() && !jniArm64.isDirectory()) return;
+            if (!jniArm64.isDirectory() && !jniArm64.mkdirs()) return;
+
+            if (userSo != null && userSo.isFile()) {
+                Files.copy(userSo.toPath(), new File(jniArm64, "libuser.so").toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            if (cppRuntime != null && cppRuntime.isFile()) {
+                Files.copy(cppRuntime.toPath(), new File(jniArm64, "libc++_shared.so").toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            File goSo = new File(outputDir, "libkr_go.so");
+            if (!goSo.isFile()) goSo = new File(new File(outputDir, "go_module"), "libkr_go.so");
+            if (goSo.isFile()) {
+                Files.copy(goSo.toPath(), new File(jniArm64, "libkr_go.so").toPath(), StandardCopyOption.REPLACE_EXISTING);
+            }
+            log.line("[ANDROID STUDIO] Native ARM64-Bibliotheken nach app/src/main/jniLibs/arm64-v8a synchronisiert.");
+        } catch (Exception ignored) {}
+    }
+
     private static void addProjectFiles(File root, ZipOutputStream out, byte[] buf) throws IOException {
         for (File f : SecureProjectPaths.collectRegularFiles(root)) {
             String relative = SecureProjectPaths.relativeName(root, f);
             String[] segments = relative.split("/");
             boolean excluded = false;
             for (String segment : segments) {
-                if (segment.startsWith(".") || segment.equals("KR_BUILD") || segment.equals("target")) {
+                if (segment.startsWith(".") || segment.equals("KR_BUILD") || segment.equals("target")
+                        || segment.equals("build") || segment.equals("gradle") || segment.equals("jniLibs")) {
                     excluded = true;
                     break;
                 }
@@ -1394,8 +1455,8 @@ public final class CompilerEngine {
         // 1. Toolchain-Pfade (integrierte portable Toolchain) primär injizieren
         ToolchainManager.getInstance().injectEnvironment(env);
 
-        // 2. Pfad des gestarteten Executables und Fallback-Systempfade ergänzen
-        String currentPath = env.getOrDefault("PATH", "");
+        // 2. Pfad des gestarteten Executables und Fallback-Systempfade ergänzen (case-safe fuer Windows 'Path' vs 'PATH')
+        String currentPath = ToolchainManager.getEnvPath(env);
         StringBuilder pathBuilder = new StringBuilder();
         if (!effectiveCmd.isEmpty()) {
             File exeFile = new File(effectiveCmd.get(0));
@@ -1405,7 +1466,7 @@ public final class CompilerEngine {
             }
         }
         pathBuilder.append(currentPath);
-        env.put("PATH", pathBuilder.toString());
+        ToolchainManager.setEnvPath(env, pathBuilder.toString());
 
         if (target == Target.ANDROID) {
             env.put("GOOS", "android");
@@ -1418,8 +1479,15 @@ public final class CompilerEngine {
         } else if (target == Target.LINUX) {
             env.put("GOOS", "linux");
             env.put("GOARCH", "amd64");
+            env.put("ZIG_GLOBAL_CACHE_DIR", ensureSecureDirectory("KR_BUILD/.cache/zig-cache").getAbsolutePath());
+            env.put("ZIG_LOCAL_CACHE_DIR", ensureSecureDirectory("KR_BUILD/.cache/zig-cache").getAbsolutePath());
             String zigLinuxLinker = ToolchainManager.getInstance().getZigLinuxLinkerExecutable();
-            if (zigLinuxLinker != null) env.put("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", zigLinuxLinker);
+            if (zigLinuxLinker != null) {
+                env.put("CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_LINKER", zigLinuxLinker);
+                env.put("CC", zigLinuxLinker);
+                env.put("CGO_CFLAGS", "-O2 -Wno-error -fno-sanitize=undefined");
+                env.put("CGO_LDFLAGS", "-Wno-error -fno-sanitize=undefined");
+            }
         } else if (target == Target.WINDOWS) {
             env.put("GOOS", "windows");
             env.put("GOARCH", "amd64");

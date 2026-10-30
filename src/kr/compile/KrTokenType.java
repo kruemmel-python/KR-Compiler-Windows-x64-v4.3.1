@@ -18,13 +18,14 @@ public enum KrTokenType {
     
     // Language constructs
     PREPROCESSOR,   // #include, #define, etc.
-    COMMENT,        // //... or /*...*/
+    COMMENT,        // //... or /*...*/ or Python #...
     IDENTIFIER,
     
     // Specific language keywords
     KEYWORD_CPP,    // class, namespace, template, constexpr, etc.
     KEYWORD_RUST,   // fn, pub, impl, trait, match, let, mut, use, etc.
     KEYWORD_GO,     // func, package, import, var, type, chan, go, etc.
+    KEYWORD_PYTHON, // def, elif, pass, None, True, False, and, or, not, etc.
     KEYWORD_COMMON, // struct, enum, if, else, for, while, return, const
     
     EOF,

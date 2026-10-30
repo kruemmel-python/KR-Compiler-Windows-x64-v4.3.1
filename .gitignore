@@ -42,3 +42,9 @@
 *.keystore
 *.pk8
 *.password
+/.codex-attachments/
+/KR-Android-Studio-Plugin-und-Handbuch-v4.3.1.zip
+/android-studio-plugin/bin/
+/android-studio-plugin/stage/
+/examples/**/local.properties
+/examples/**/build/
