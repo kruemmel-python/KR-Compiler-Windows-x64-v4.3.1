@@ -173,7 +173,13 @@ public final class CompilerEngine {
                 log.line("[INFO] Kompiliere Go-Modul mit Go …");
                 List<String> goCmd;
                 if (target == Target.ANDROID) {
-                    goCmd = Arrays.asList(go, "build", "-buildmode=c-shared", "-o", "libkr_go.so", ".");
+                    // Ohne SONAME übernimmt der Android-Linker den absoluten Windows-Pfad
+                    // der Eingabedatei als DT_NEEDED-Eintrag in libuser.so. Android kann
+                    // diesen Pfad nicht auflösen; die Bibliothek muss als lokales APK-So
+                    // unter ihrem ELF-Namen referenziert werden.
+                    goCmd = Arrays.asList(go, "build", "-buildmode=c-shared",
+                            "-ldflags=-extldflags=-Wl,-soname,libkr_go.so",
+                            "-o", "libkr_go.so", ".");
                 } else {
                     goCmd = Arrays.asList(go, "build", "-buildmode=c-archive", "-o", "libkr_go.a", ".");
                 }
@@ -561,7 +567,7 @@ public final class CompilerEngine {
         }
 
         if (target == Target.ANDROID) {
-            return packageAndroidApk(outputDir, artifact, Collections.emptyList(), projectDir, needsSdl3, buildLog);
+            return packageAndroidApk(outputDir, artifact, Collections.emptyList(), projectDir, needsSdl3, needsSqlite3, buildLog);
         }
 
         log.line("[INFO] Erzeugt: " + artifact.getName() + " (" + artifact.length() + " Bytes)");
@@ -580,10 +586,15 @@ public final class CompilerEngine {
     }
 
     private File packageAndroidApk(File outputDir, File userSo, File projectDir, boolean isGui, File buildLog) throws Exception {
-        return packageAndroidApk(outputDir, userSo, Collections.emptyList(), projectDir, isGui, buildLog);
+        return packageAndroidApk(outputDir, userSo, Collections.emptyList(), projectDir, isGui, false, buildLog);
     }
 
     private File packageAndroidApk(File outputDir, File userSo, List<File> extraLibraries, File projectDir, boolean isGui, File buildLog) throws Exception {
+        return packageAndroidApk(outputDir, userSo, extraLibraries, projectDir, isGui, false, buildLog);
+    }
+
+    private File packageAndroidApk(File outputDir, File userSo, List<File> extraLibraries, File projectDir,
+                                   boolean isGui, boolean includeSqlite3, File buildLog) throws Exception {
         log.line("[INFO] Erstelle Android ARM64 Runner APK …");
         File toolchainDir = ToolchainManager.getInstance().getToolchainDir();
         File androidDir = new File(toolchainDir, "android");
@@ -654,7 +665,7 @@ public final class CompilerEngine {
                 addZipFile(zos, written, "lib/arm64-v8a/libc++_shared.so", cppRuntime, buf);
             }
             File sqliteSo = new File(androidDir, "libsqlite3.so");
-            if (sqliteSo.isFile()) {
+            if (includeSqlite3 && sqliteSo.isFile()) {
                 addZipFile(zos, written, "lib/arm64-v8a/libsqlite3.so", sqliteSo, buf);
             }
             File sdl3So = new File(androidDir, "libSDL3.so");
@@ -671,6 +682,12 @@ public final class CompilerEngine {
             if (projectZip.isFile()) {
                 addZipFile(zos, written, "assets/kr-project-data.zip", projectZip, buf);
             }
+            // UI-Rasterassets werden zusätzlich direkt als Android-Assets
+            // ausgeliefert. SDL kann diese über seinen Android-Asset-IO-Pfad
+            // laden; sie müssen deshalb nicht erst aus dem Projektarchiv
+            // entpackt werden. Das ist insbesondere für native Hintergründe,
+            // Glow-Texturen und Font-Atlanten erforderlich.
+            addAndroidUiAssets(projectDir, zos, written, buf);
             File pyMod = new File(new File(outputDir, "python_module"), "kr_python_module.py");
             if (pyMod.isFile()) {
                 addZipFile(zos, written, "assets/kr-python/kr_python_module.py", pyMod, buf);
@@ -759,6 +776,17 @@ public final class CompilerEngine {
                 while ((n = in.read(buf)) >= 0) out.write(buf, 0, n);
             }
             out.closeEntry();
+        }
+    }
+
+    private static void addAndroidUiAssets(File projectDir, ZipOutputStream out,
+                                           Set<String> written, byte[] buf) throws IOException {
+        File assetsDir = new File(projectDir, "assets");
+        if (!assetsDir.isDirectory()) return;
+        for (File file : SecureProjectPaths.collectRegularFiles(assetsDir)) {
+            String relative = SecureProjectPaths.relativeName(assetsDir, file);
+            if (relative.isEmpty() || relative.contains("..")) continue;
+            addZipFile(out, written, "assets/kr-ui/" + relative, file, buf);
         }
     }
 

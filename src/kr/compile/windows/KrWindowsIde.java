@@ -52,7 +52,7 @@ public final class KrWindowsIde extends JFrame {
     }
 
     public KrWindowsIde() {
-        super("KR Compiler IDE v4.3.1 – Windows Desktop Edition");
+        super("KR Compiler IDE v4.3.2 – Windows Desktop Edition");
         setUndecorated(true);
         setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         setSize(1280, 800);
@@ -145,7 +145,7 @@ public final class KrWindowsIde extends JFrame {
         statusAgent = new JLabel("Agent: Bereit");
         statusAgent.setForeground(DarkTheme.ACCENT_GREEN);
 
-        JLabel infoVersion = new JLabel("v4.3.1 Windows Edition | Entwickler: Ralf Krümmel");
+        JLabel infoVersion = new JLabel("v4.3.2 Windows Edition | Entwickler: Ralf Krümmel");
         infoVersion.setForeground(DarkTheme.FG_MUTED);
 
         statusBar.add(statusProject);
@@ -160,12 +160,12 @@ public final class KrWindowsIde extends JFrame {
         projectListener = new ProjectManager.Listener() {
             @Override public void onProjectOpened(File p) {
                 statusProject.setText("Projekt: " + p.getName());
-                setTitle("KR Compiler IDE v4.3.1 – " + p.getName());
+                setTitle("KR Compiler IDE v4.3.2 – " + p.getName());
                 openDefaultProjectFile(p);
             }
             @Override public void onProjectClosed() {
                 statusProject.setText("Projekt: Kein Projekt");
-                setTitle("KR Compiler IDE v4.3.1 – Windows Desktop Edition");
+                setTitle("KR Compiler IDE v4.3.2 – Windows Desktop Edition");
             }
             @Override public void onTreeRefreshed(File p) {}
         };
@@ -244,7 +244,7 @@ public final class KrWindowsIde extends JFrame {
         emblem.setFont(new Font("Consolas", Font.BOLD, 11)); emblem.setBorder(BorderFactory.createEmptyBorder(3, 3, 3, 3));
         mb.add(Box.createHorizontalStrut(8)); mb.add(emblem); mb.add(Box.createHorizontalStrut(8));
         JLabel appTitle = new JLabel("KR Compiler IDE  "); appTitle.setFont(new Font("Segoe UI", Font.BOLD, 12)); appTitle.setForeground(Color.WHITE); mb.add(appTitle);
-        JLabel edition = new JLabel("v4.3.1 – Windows Desktop Edition   "); edition.setFont(DarkTheme.FONT_REGULAR); edition.setForeground(DarkTheme.FG_SECONDARY); mb.add(edition);
+        JLabel edition = new JLabel("v4.3.2 – Windows Desktop Edition   "); edition.setFont(DarkTheme.FONT_REGULAR); edition.setForeground(DarkTheme.FG_SECONDARY); mb.add(edition);
         JSeparator titleSep = new JSeparator(SwingConstants.VERTICAL); titleSep.setMaximumSize(new Dimension(1, 18)); mb.add(titleSep); mb.add(Box.createHorizontalStrut(10));
 
         // Menü: Projekt
@@ -757,7 +757,7 @@ public final class KrWindowsIde extends JFrame {
         titleLabel.setForeground(Color.WHITE);
         titleLabel.setAlignmentX(Component.LEFT_ALIGNMENT);
 
-        JLabel versionLabel = new JLabel("Version 4.3.1");
+        JLabel versionLabel = new JLabel("Version 4.3.2");
         versionLabel.setFont(new Font("Segoe UI", Font.BOLD, 13));
         versionLabel.setForeground(DarkTheme.ACCENT_BLUE);
         versionLabel.setAlignmentX(Component.LEFT_ALIGNMENT);

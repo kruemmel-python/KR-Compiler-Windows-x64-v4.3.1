@@ -33,7 +33,7 @@ Zusätzlich enthält dieses Repository das offizielle **KR Unified Language Plug
 | **3.** | **KR Unified Language Plugin (`KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip`)** | Erweitert Android Studio um den `.kr`-Mehrsprachen-Editor, Echtzeit-Diagnose, Gradle-Adapter und das `KR Unified Language` Tool-Window. | In Android Studio über **`Settings → Plugins → ⚙️ → Install Plugin from Disk...`** die Datei `KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip` installieren. |
 | **4.** | **Pfad-Verknüpfung zwischen Plugin & KR Compiler IDE** | Damit das Android-Studio-Plugin weiß, wo Ihre entpackte KR Compiler IDE (`toolchain/` & `dist/`) liegt. | **Entweder** im unteren Android-Studio-ToolWindow `KR Unified Language` auf **`KR-Engine Pfad…`** klicken und den Ordner `KR-Compiler-Windows-x64-v4.3.1` auswählen, **oder** die Windows-Umgebungsvariable `KR_COMPILER_HOME` auf diesen Ordner setzen. |
 
-📘 **Ausführliches Handbuch:** Siehe [DOKUMENTATION-Android-Studio-Plugin.md](DOKUMENTATION-Android-Studio-Plugin.md) und [KR_Android_Studio_Handbuch.md](KR_Android_Studio_Handbuch.md).  
+📘 **Ausführliches Handbuch:** Das komplette, bebilderte Handbuch für die KR Compiler IDE und alle Plugins steht unter [docs/KR-Compiler-IDE-Handbuch.md](docs/KR-Compiler-IDE-Handbuch.md). Android-spezifische Details finden sich zusätzlich in [DOKUMENTATION-Android-Studio-Plugin.md](DOKUMENTATION-Android-Studio-Plugin.md) und [KR_Android_Studio_Handbuch.md](KR_Android_Studio_Handbuch.md).  
 🧪 **Fertiges 4-Sprachen-Beispielprojekt für Android Studio:** [`examples/KR_ANDROID_STUDIO_4LANG_DEMO`](examples/KR_ANDROID_STUDIO_4LANG_DEMO) (direkt über `File → Open...` in Android Studio ladbar).
 
 ---

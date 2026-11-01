@@ -19,7 +19,7 @@ final class MockupWelcomePanel extends JPanel {
         content.setLayout(new BoxLayout(content, BoxLayout.Y_AXIS));
         content.setPreferredSize(new Dimension(850, 620));
 
-        JLabel release = label("●  Release v4.3.1  •  Windows Desktop Edition  •  Windows x64", 11, Font.PLAIN, DarkTheme.FG_SECONDARY);
+        JLabel release = label("●  Release v4.3.2  •  Windows Desktop Edition  •  Windows x64", 11, Font.PLAIN, DarkTheme.FG_SECONDARY);
         release.setFont(new Font("Consolas", Font.PLAIN, 11));
         release.setBorder(BorderFactory.createCompoundBorder(line(), BorderFactory.createEmptyBorder(5, 12, 5, 12)));
         center(release);
@@ -50,7 +50,7 @@ final class MockupWelcomePanel extends JPanel {
         JPanel recent = new JPanel(new GridLayout(1, 3, 10, 0)); recent.setOpaque(false); recent.setMaximumSize(new Dimension(850, 54));
         recent.add(recentItem("Lokales KR-Projekt", "Zuletzt verwendeter Arbeitsbereich", ".kr"));
         recent.add(recentItem("GitHub-Repository klonen", "Remote-Projekt als Arbeitsbereich öffnen", "Clone"));
-        recent.add(recentItem("Release v4.3.1 veröffentlichen", "Push nach origin/main  + .exe Artefakte", "Push"));
+        recent.add(recentItem("Release v4.3.2 veröffentlichen", "Push nach origin/main  + .exe Artefakte", "Push"));
         content.add(recent);
 
         add(content, new GridBagConstraints());

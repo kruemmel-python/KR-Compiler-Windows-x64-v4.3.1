@@ -45,7 +45,7 @@ public final class CodeEditorPanel extends JPanel implements DocumentManager.Lis
         box.setLayout(new BoxLayout(box, BoxLayout.Y_AXIS));
         box.setOpaque(false);
 
-        JLabel release = new JLabel("● Release v4.3.1  ·  Windows Desktop Edition  ·  Windows x64");
+        JLabel release = new JLabel("● Release v4.3.2  ·  Windows Desktop Edition  ·  Windows x64");
         release.setFont(new Font("Consolas", Font.PLAIN, 11));
         release.setForeground(DarkTheme.FG_SECONDARY);
         release.setAlignmentX(Component.CENTER_ALIGNMENT);
