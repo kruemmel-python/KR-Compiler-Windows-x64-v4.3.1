@@ -156,7 +156,7 @@ public final class KrToolWindowPanel extends JPanel {
         if (!ToolchainManager.getInstance().isEmbeddedToolchainPresent()) {
             appendConsole("[WICHTIG] Das KR Unified Language Plugin benötigt eine installierte KR Compiler IDE (inkl. 'toolchain/' und 'runtime/').");
             appendConsole("[DOWNLOAD] Release herunterladen unter: " + KrStudioCompilerBridge.GITHUB_RELEASE_URL);
-            appendConsole("[EINRICHTUNG] Klicke oben auf 'KR-Engine Pfad…' und wähle den entpackten Ordner 'KR-Compiler-Windows-x64-v4.3.1' aus (oder setze die Umgebungsvariable KR_COMPILER_HOME).");
+            appendConsole("[EINRICHTUNG] Klicke oben auf 'KR-Engine Pfad…' und wähle den entpackten Ordner 'KR-Compiler-Windows-x64-v4.3.2' aus (oder setze die Umgebungsvariable KR_COMPILER_HOME).");
         }
 
         refreshAnalysis();
@@ -166,7 +166,7 @@ public final class KrToolWindowPanel extends JPanel {
         File krHome = KrStudioCompilerBridge.resolveKrCompilerHome();
         boolean tcOk = ToolchainManager.getInstance().isEmbeddedToolchainPresent() || new File(krHome, "toolchain").isDirectory();
         File ndkDir = ToolchainManager.getInstance().getNdkDir();
-        String tcInfo = "KR Engine v4.3.1 | KR-IDE: " + (tcOk ? krHome.getAbsolutePath() : "FEHLT (bitte 'KR-Engine Pfad…' wählen!)")
+        String tcInfo = "KR Engine v4.3.2 | KR-IDE: " + (tcOk ? krHome.getAbsolutePath() : "FEHLT (bitte 'KR-Engine Pfad…' wählen!)")
                 + " | Android NDK: " + (ndkDir != null ? ndkDir.getName() : "Nicht gefunden")
                 + " | Python-Strategie: AOT_NATIVE_CPP20_BRIDGE";
         statusLabel.setText(tcInfo);

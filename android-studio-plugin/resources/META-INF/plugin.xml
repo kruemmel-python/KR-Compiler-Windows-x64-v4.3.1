@@ -1,7 +1,7 @@
 <idea-plugin>
   <id>kr.compile.studio.unified</id>
   <name>KR Unified Language (C++ / Rust / Go / Python)</name>
-  <version>4.3.1</version>
+  <version>4.3.2</version>
   <category>Languages</category>
   <vendor email="ralf.kruemmel@kr-compiler.local" url="https://kr-compiler.local">Ralf Krümmel – KR Multisprachen-Technologie</vendor>
 
@@ -9,7 +9,7 @@
 
   <description><![CDATA[
     <h3>KR Unified Language Plugin für Android Studio Rabbit 2 (Canary 2 &amp; Stable)</h3>
-    <p>Verbindet <b>C++20</b> (Native), <b>Rust</b> (Rules), <b>Go</b> (Services) und <b>Python</b> (Logic) innerhalb eines einzigen Projekts über die bestehende <b>KR Unified Language Engine (v4.3.1)</b>.</p>
+    <p>Verbindet <b>C++20</b> (Native), <b>Rust</b> (Rules), <b>Go</b> (Services) und <b>Python</b> (Logic) innerhalb eines einzigen Projekts über die bestehende <b>KR Unified Language Engine (v4.3.2)</b>.</p>
     <ul>
       <li><b>1. KR Editor Plugin:</b> Nativer Dateityp <code>.kr</code> &amp; <code>.krproject</code>, mehrsprachige Syntaxhervorhebung (C++, Rust, Go, Python), Sprachbereichserkennung, Echtzeit-Diagnose und Fehlerzuordnung auf Zeilenebene.</li>
       <li><b>2. KR Compiler Bridge:</b> Direkte Anbindung der bestehenden KR Multi-File Pipeline, automatische Generierung von <code>kr_bridge.h</code> und sprachübergreifender ABI-Symbolauflösung.</li>

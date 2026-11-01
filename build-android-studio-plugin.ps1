@@ -58,7 +58,7 @@ $PluginJarPath = Join-Path $StageLibDir "kr-unified-language.jar"
 & $JarExe cf $PluginJarPath -C $PluginBinDir .
 if ($LASTEXITCODE -ne 0) { throw "Erstellung von kr-unified-language.jar fehlgeschlagen." }
 
-$PluginZipPath = Join-Path $DistDir "KR-Unified-Language-AndroidStudio-Plugin-v4.3.1.zip"
+$PluginZipPath = Join-Path $DistDir "KR-Unified-Language-AndroidStudio-Plugin-v4.3.2.zip"
 if (Test-Path $PluginZipPath) { Remove-Item -Force $PluginZipPath }
 Compress-Archive -Path (Join-Path $BuildStage "kr-unified-language") -DestinationPath $PluginZipPath -Force
 Write-Host "[OK] Installierbares Plugin-ZIP erstellt: $PluginZipPath" -ForegroundColor Green

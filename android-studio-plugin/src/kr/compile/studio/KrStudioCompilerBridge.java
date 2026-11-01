@@ -28,7 +28,7 @@ import java.util.List;
  */
 public final class KrStudioCompilerBridge {
 
-    public static final String DEFAULT_KR_HOME = "H:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1";
+    public static final String DEFAULT_KR_HOME = "H:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.2";
     public static final String GITHUB_RELEASE_URL = "https://github.com/kruemmel-python/KR-Compiler-Windows-x64-v4.3.1/releases";
 
     static {
@@ -81,10 +81,12 @@ public final class KrStudioCompilerBridge {
         String userHome = System.getProperty("user.home", ".");
         String[] candidates = {
                 DEFAULT_KR_HOME,
-                "C:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1",
-                "D:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1",
-                new File(userHome, "KR-Compiler-Windows-x64-v4.3.1").getAbsolutePath(),
-                new File(userHome, "Desktop\\KR-Compiler-Windows-x64-v4.3.1").getAbsolutePath()
+                "C:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.2",
+                "D:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.2",
+                new File(userHome, "KR-Compiler-Windows-x64-v4.3.2").getAbsolutePath(),
+                new File(userHome, "Desktop\\KR-Compiler-Windows-x64-v4.3.2").getAbsolutePath(),
+                "H:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1",
+                "C:\\KR-Compiler\\KR-Compiler-Windows-x64-v4.3.1"
         };
         for (String c : candidates) {
             File dir = new File(c);
@@ -321,7 +323,7 @@ public final class KrStudioCompilerBridge {
         File gradleBridge = new File(projectDir, "kr-android-bridge.gradle.kts");
         String content = "// Automatisch generierter KR Android Build Adapter fuer Android Studio Rabbit 2\n"
                 + "// Verbindet Gradle mit der bestehenden KR Unified Language Pipeline (C++20, Rust, Go, Python).\n\n"
-                + "val krCompilerHome = System.getenv(\"KR_COMPILER_HOME\") ?: \"H:/KR-Compiler/KR-Compiler-Windows-x64-v4.3.1\"\n\n"
+                + "val krCompilerHome = System.getenv(\"KR_COMPILER_HOME\") ?: \"H:/KR-Compiler/KR-Compiler-Windows-x64-v4.3.2\"\n\n"
                 + "tasks.register<Exec>(\"compileKrUnifiedAndroidArm64\") {\n"
                 + "    group = \"kr unified language\"\n"
                 + "    description = \"Kompiliert alle .kr-Dateien (C++, Rust, Go, Python) ueber die KR-Pipeline nach KR_BUILD und jniLibs/arm64-v8a\"\n"
@@ -483,7 +485,7 @@ public final class KrStudioCompilerBridge {
                     + "        minSdk = 26\n"
                     + "        targetSdk = 35\n"
                     + "        versionCode = 1\n"
-                    + "        versionName = \"4.3.1\"\n\n"
+                    + "        versionName = \"4.3.2\"\n\n"
                     + "        ndk {\n"
                     + "            abiFilters += listOf(\"arm64-v8a\")\n"
                     + "        }\n"
@@ -557,7 +559,7 @@ public final class KrStudioCompilerBridge {
                     + "        layout.setOrientation(LinearLayout.VERTICAL);\n"
                     + "        layout.setPadding(48, 64, 48, 64);\n\n"
                     + "        TextView title = new TextView(this);\n"
-                    + "        title.setText(\"KR Unified Language v4.3.1\\n4-Sprachen-Fusion (ARM64)\");\n"
+                    + "        title.setText(\"KR Unified Language v4.3.2\\n4-Sprachen-Fusion (ARM64)\");\n"
                     + "        title.setTextColor(Color.parseColor(\"#00E5A3\"));\n"
                     + "        title.setTextSize(22f);\n"
                     + "        title.setTypeface(Typeface.DEFAULT_BOLD);\n"
