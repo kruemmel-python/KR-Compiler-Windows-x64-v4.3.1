@@ -1,6 +1,6 @@
 # KR Compiler IDE
 
-**KR Unified Language für C++20, Rust, Go und Python**  
+**KR Unified Language für C++20, Rust, Go und Python**
 Windows x64 · Linux x64 · Android ARM64 · Android Studio · Visual Studio 2022 · Antigravity
 
 KR Compiler IDE ist eine Entwicklungsumgebung und Build-Pipeline für KR-Projekte. Eine `.kr`-Datei kann Bereiche aus C++20, Rust, Go und Python zusammenführen. Die KR-Pipeline erzeugt die nötigen ABI-Brücken und übergibt die jeweiligen Sprachanteile an die vorhandenen nativen Toolchains. Die Entscheidung, welche Sprache verwendet wird, bleibt beim Entwickler.
